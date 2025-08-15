@@ -1,0 +1,16 @@
+name: Build new DispatchTool
+description: Paste the raw scheme (.scm or .txt) and I will rebuild the live Dispatch tool.
+title: "Build: DispatchTool update"
+labels: [dispatch-build]
+body:
+  - type: textarea
+    id: scheme
+    attributes:
+      label: Paste scheme text
+      description: Paste the entire contents of your .scm or .txt
+      placeholder: |
+        Example:
+        "18*ATL*...*303-304,30500-30599,..."
+        "19*ATL*...*..."
+    validations:
+      required: true
