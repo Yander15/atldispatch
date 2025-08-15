@@ -1,6 +1,6 @@
 // tools/build.js
 // Builds DispatchTool.html from data/scheme.txt and writes version.json
-// Kiosk mode: big keypad, fullscreen-friendly, 5s popup for results
+// Kiosk mode: big keypad, fullscreen friendly, 5s popup, Dashboard button
 
 const fs = require('fs');
 const path = require('path');
@@ -109,7 +109,7 @@ function buildDispatchHTML(b64csv) {
   html += '.tabs{display:flex;gap:8px;overflow:auto;padding:8px 0}\n';
   html += '.tab{padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#1a1f2b;cursor:pointer;white-space:nowrap}\n';
   html += '.tab.active{background:#1f2a3f;border-color:#4d6cff}\n';
-  html += '.wrap{padding:14px;max-width:1000px;margin:0 auto}\n';
+  html += '.wrap{padding:14px;max-width:1200px;margin:0 auto}\n';
   html += '.card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:14px 0}\n';
   html += '.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}\n';
   html += 'input[type=text]{font:22px system-ui;letter-spacing:1px;width:260px;padding:12px;border-radius:12px;border:1px solid var(--line);background:#101521;color:var(--fg)}\n';
@@ -126,16 +126,22 @@ function buildDispatchHTML(b64csv) {
   html += '.badge.play{background:#121212;color:#fff} .badge.appstore{background:#000;color:#fff}\n';
   html += '.pill{padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:#121827}\n';
   html += '.topbar-actions{display:flex;gap:8px;align-items:center}\n';
+  html += 'a.linkbtn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:var(--fg);background:#1c2230;border:1px solid var(--line);padding:10px 14px;border-radius:12px}\n';
+  html += 'a.linkbtn:hover{filter:brightness(1.08)}\n';
 
-  // Kiosk upgrades
+  // Kiosk upgrades and taller keypad area
   html += 'body.fullscreen{height:100vh;overflow:hidden}\n';
   html += '.pane{max-width:1200px;margin:0 auto}\n';
+  html += '.pane-fill{min-height:60vh}\n';
+  html += 'body.fullscreen .pane-fill{min-height:calc(100vh - 160px)}\n';
   html += '.kiosk{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}\n';
   html += '@media (max-width:900px){.kiosk{grid-template-columns:1fr}}\n';
   html += '#zip{font-size:clamp(24px,3.5vh,40px);width:100%}\n';
   html += '#go{font-size:clamp(18px,2.8vh,28px)}\n';
-  html += '.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px}\n';
-  html += '.key{font-size:clamp(22px,4.5vh,36px);padding:clamp(16px,3.8vh,28px);border-radius:12px;border:1px solid var(--line);background:#131826}\n';
+  html += '.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px;align-content:stretch}\n';
+  html += '#pad{min-height:32vh}\n';
+  html += 'body.fullscreen #pad{min-height:50vh}\n';
+  html += '.key{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,4.5vh,36px);padding:clamp(16px,3.8vh,28px);border-radius:12px;border:1px solid var(--line);background:#131826}\n';
   html += '.big{font-size:clamp(46px,9vh,96px)}\n';
 
   // Toast popup
@@ -145,15 +151,15 @@ function buildDispatchHTML(b64csv) {
   // Single scheme payload
   html += `<script id="scheme_b64" type="text/plain">${b64csv}</script>\n`;
 
-  // App chrome
-  html += '<div class="bar"><div class="row" style="justify-content:space-between;"><div class="title">Dispatch Command Center</div><div class="topbar-actions"><button id="fsBtn" title="Fullscreen">Fullscreen</button></div></div><div class="tabs"><div class="tab active" data-tab="lookup">Lookup</div><div class="tab" data-tab="bin">BIN Ranges</div><div class="tab" data-tab="history">History</div><div class="tab" data-tab="apps">Apps</div></div></div>\n';
+  // App chrome with Dashboard link
+  html += '<div class="bar"><div class="row" style="justify-content:space-between;"><div class="title">Dispatch Command Center</div><div class="topbar-actions"><a class="linkbtn" id="homeBtn" href="./" title="Back to Dashboard">Dashboard</a><button id="fsBtn" title="Fullscreen">Fullscreen</button></div></div><div class="tabs"><div class="tab active" data-tab="lookup">Lookup</div><div class="tab" data-tab="bin">BIN Ranges</div><div class="tab" data-tab="history">History</div><div class="tab" data-tab="apps">Apps</div></div></div>\n';
   html += '<div class="wrap">\n';
 
   // Toast element
   html += '<div id="toast" aria-live="polite"></div>\n';
 
-  // Lookup pane - kiosk grid
-  html += '<div class="card pane" id="pane-lookup" style="display:block">';
+  // Lookup pane - kiosk grid and fill height
+  html += '<div class="card pane pane-fill" id="pane-lookup" style="display:block">';
   html +=   '<div class="kiosk">';
   html +=     '<div>';
   html +=       '<div class="row"><input id="zip" inputmode="numeric" maxlength="11" placeholder="Enter 5, 9, or 11 digits"><button id="go">Lookup</button><span class="muted pill">Tip: use the on-screen keypad</span></div>';
@@ -196,8 +202,8 @@ function buildDispatchHTML(b64csv) {
   // Load CSV
   html += '(function(){var csv=decodeURIComponent(escape(atob(document.getElementById("scheme_b64").textContent)));SCHEME=parseCSV(csv);})();\n';
 
-  // Fullscreen toggle with body.fullscreen class
-  html += '(function(){var b=document.getElementById("fsBtn");function setFSClass(){document.body.classList.toggle("fullscreen", !!document.fullscreenElement);}document.addEventListener("fullscreenchange", setFSClass);b.onclick=function(){var d=document.documentElement;if(!document.fullscreenElement){(d.requestFullscreen||d.webkitRequestFullscreen||d.msRequestFullscreen).call(d);}else{(document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen).call(document);} };setFSClass();})();\n';
+  // Fullscreen toggle with body.fullscreen class and Esc-to-dashboard outside FS
+  html += '(function(){var b=document.getElementById("fsBtn");function setFSClass(){document.body.classList.toggle("fullscreen", !!document.fullscreenElement);}document.addEventListener("fullscreenchange", setFSClass);document.addEventListener("keydown",function(e){if(e.key==="Escape" && !document.fullscreenElement){location.href="./";}});b.onclick=function(){var d=document.documentElement;if(!document.fullscreenElement){(d.requestFullscreen||d.webkitRequestFullscreen||d.msRequestFullscreen).call(d);}else{(document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen).call(document);} };setFSClass();})();\n';
 
   // Build keypad
   html += '(function(){var pad=document.getElementById("pad");var keys=["1","2","3","4","5","6","7","8","9","CLR","0","ENTER"];for(var i=0;i<keys.length;i++){var k=document.createElement("button");k.className="key";k.textContent=keys[i];pad.appendChild(k);}})();\n';
