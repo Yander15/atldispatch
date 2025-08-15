@@ -96,6 +96,25 @@
     </nav>
 
     <footer>© ATL Dispatch</footer>
+    <footer id="ver" style="margin-top:22px; text-align:center; color:var(--muted); font-size:13px">
+  Build: <span id="verTxt">loading…</span>
+</footer>
+
+<script>
+(function(){
+  fetch('version.json', {cache:'no-store'}).then(r => r.json()).then(info => {
+    // Example: Aug 15, 2025 11:07 AM — 12,345 rows
+    const dt = new Date(info.built);
+    const fmt = dt.toLocaleString(undefined, {year:'numeric', month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+    const rows = (info.rows||0).toLocaleString();
+    document.getElementById('verTxt').textContent = `${fmt} — ${rows} rows`;
+  }).catch(() => {
+    document.getElementById('verTxt').textContent = 'unknown';
+  });
+})();
+</script>
+
   </div>
 </body>
 </html>
+
