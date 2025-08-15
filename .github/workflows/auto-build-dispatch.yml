@@ -1,0 +1,56 @@
+name: Auto build DispatchTool from Issue
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: >
+      contains( join(github.event.issue.labels.*.name, ' '), 'dispatch-build' )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract scheme text from issue body
+        run: |
+          python - << 'PY'
+          import json, os, re
+          event_path = os.environ['GITHUB_EVENT_PATH']
+          with open(event_path, 'r', encoding='utf-8') as f:
+              ev = json.load(f)
+          body = ev['issue']['body'] or ''
+          # Strip code fences if pasted
+          body = re.sub(r'^```[\s\S]*?\n', '', body, flags=re.MULTILINE)
+          body = re.sub(r'\n```$', '', body, flags=re.MULTILINE)
+          body = body.strip()
+          os.makedirs('data', exist_ok=True)
+          with open('data/scheme.txt', 'w', encoding='utf-8') as f:
+              f.write(body)
+          print("Wrote data/scheme.txt")
+          PY
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build DispatchTool.html
+        run: |
+          node tools/build.js
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add DispatchTool.html
+          if ! git diff --cached --quiet; then
+            git commit -m "Auto build DispatchTool from Issue #${{ github.event.issue.number }}"
+            git push
+          else
+            echo "No changes in DispatchTool.html"
+          fi
