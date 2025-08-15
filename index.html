@@ -2,47 +2,69 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>ATL Dispatch - Landing</title>
+<title>ATL Dispatch Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body {
     font-family: system-ui, sans-serif;
-    text-align: center;
-    padding: 50px;
-    background: #f8f8f8;
-  }
-  h1 {
-    margin-bottom: 20px;
-  }
-  .menu {
+    margin: 0;
+    background: linear-gradient(135deg, #0078d4, #005fa3);
+    color: white;
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    max-width: 300px;
-    margin: auto;
+    align-items: center;
+    padding: 40px 20px;
   }
-  a {
-    display: block;
-    padding: 12px;
-    background: #0078d4;
+  h1 {
+    margin-bottom: 10px;
+    font-size: 2rem;
+    text-align: center;
+  }
+  p {
+    margin-bottom: 30px;
+    text-align: center;
+    opacity: 0.9;
+  }
+  .dashboard {
+    display: grid;
+    gap: 20px;
+    width: 100%;
+    max-width: 400px;
+  }
+  .card {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: transform 0.15s ease, background 0.15s ease;
+    font-size: 1.1rem;
+  }
+  .card a {
     color: white;
     text-decoration: none;
-    border-radius: 8px;
-    font-weight: 500;
+    display: block;
   }
-  a:hover {
-    background: #005fa3;
+  .card:hover {
+    transform: scale(1.03);
+    background: rgba(255, 255, 255, 0.25);
   }
 </style>
 </head>
 <body>
 
 <h1>ATL Dispatch</h1>
-<p>Select a tool to access:</p>
+<p>Select a tool to continue</p>
 
-<div class="menu">
-  <a href="DispatchTool.html">Dispatch Tool</a>
-  <a href="AnotherTool.html">Another Tool (Future)</a>
+<div class="dashboard">
+  <div class="card">
+    <a href="DispatchTool.html">🚚 Dispatch Tool</a>
+  </div>
+  <div class="card">
+    <a href="AnotherTool.html">📦 Another Tool</a>
+  </div>
+  <div class="card">
+    <a href="Reports.html">📊 Reports</a>
+  </div>
 </div>
 
 </body>
