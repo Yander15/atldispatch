@@ -1,6 +1,6 @@
 // tools/build.js
 // Builds DispatchTool.html from data/scheme.txt and writes version.json
-// Mobile-first kiosk: docked keypad on phones, big targets, 5s toast, Dashboard button
+// Mobile-first kiosk: docked keypad, Dashboard button, ATL Machine mapping, no History tab
 
 const fs = require('fs');
 const path = require('path');
@@ -97,14 +97,14 @@ function toCSV(rows) {
 }
 function b64encodeUtf8(str) { return Buffer.from(str, 'utf8').toString('base64'); }
 
-// ---------- HTML builder with mobile docked keypad ----------
+// ---------- HTML builder ----------
 function buildDispatchHTML(b64csv) {
   let html = '';
   html += '<!doctype html>\n<meta charset="utf-8">\n<title>Dispatch Command Center - Offline</title>\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">\n';
   html += '<style>\n';
   html += ':root{--bg:#0f1115;--fg:#e8eaf0;--muted:#9aa3b2;--card:#171a21;--line:#2a2f3a;--accent:#7aa2ff;--green:#1fbf75;--orange:#ff9f40;--blue:#4ea1ff}\n';
   html += 'html,body{height:100%}\n';
-  html += 'body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,-apple-system,"Segoe UI",Roboto}\n';
+  html += 'body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,-apple-system,"Segoe UI",Roboto;overscroll-behavior:none;touch-action:manipulation}\n';
   html += '.shell{min-height:100svh;display:flex;flex-direction:column}\n';
   html += '.bar{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.9);backdrop-filter:saturate(180%) blur(8px);padding:10px 12px;border-bottom:1px solid var(--line)}\n';
   html += '.title{font-size:18px;font-weight:700} .muted{color:var(--muted);font-size:12px}\n';
@@ -114,7 +114,7 @@ function buildDispatchHTML(b64csv) {
   html += '.tabs::-webkit-scrollbar{display:none}\n';
   html += '.tab{flex:0 0 auto;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#1a1f2b;cursor:pointer}\n';
   html += '.tab.active{background:#1f2a3f;border-color:#4d6cff}\n';
-  html += '.wrap{flex:1 1 auto;width:100%;max-width:1200px;margin:0 auto;padding:12px}\n';
+  html += '.wrap{flex:1 1 auto;width:100%;max-width:1200px;margin:0 auto;padding:12px;overscroll-behavior:contain}\n';
   html += '.card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:12px 0}\n';
   html += '.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}\n';
   html += 'input[type=text]{font:22px system-ui;letter-spacing:1px;width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);background:#101521;color:var(--fg)}\n';
@@ -146,11 +146,11 @@ function buildDispatchHTML(b64csv) {
   html += '.keypad-dock{display:block}\n';
   html += '@media (max-width:900px){\n';
   html += '  .keypad-dock{position:fixed;left:0;right:0;bottom:0;background:rgba(13,18,26,.96);backdrop-filter:saturate(160%) blur(6px);border-top:1px solid var(--line);padding:12px env(safe-area-inset-right) calc(12px + env(safe-area-inset-bottom)) env(safe-area-inset-left);height:52svh;z-index:9}\n';
-  html += '  body.has-dock{padding-bottom:55svh}\n';
+  html += '  body.has-dock .wrap{padding-bottom:55svh}\n';
   html += '  #zip{font-size:clamp(22px,3.6vh,36px)} #go{font-size:clamp(18px,3.0vh,28px)} .big{font-size:clamp(40px,7.5vh,80px)}\n';
   html += '}\n';
   html += 'body.fullscreen .keypad-dock{height:66svh}\n';
-  html += 'body.fullscreen.has-dock{padding-bottom:69svh}\n';
+  html += 'body.fullscreen.has-dock .wrap{padding-bottom:69svh}\n';
 
   // toast
   html += '#toast{position:fixed;left:50%;top:12%;transform:translateX(-50%);background:rgba(20,25,36,.95);border:1px solid var(--line);border-radius:16px;padding:16px 20px;z-index:9999;display:none;box-shadow:0 14px 40px rgba(0,0,0,.45);font-size:clamp(24px,6.2vh,52px);font-weight:800;letter-spacing:.4px;text-align:center}\n';
@@ -163,8 +163,8 @@ function buildDispatchHTML(b64csv) {
   // Shell start
   html += '<div class="shell">\n';
 
-  // App chrome with Dashboard link
-  html += '<div class="bar"><div class="row" style="justify-content:space-between;"><div class="title">Dispatch Command Center</div><div class="topbar-actions"><a class="linkbtn" id="homeBtn" href="./" title="Back to Dashboard">Dashboard</a><button id="fsBtn" title="Fullscreen">Fullscreen</button></div></div><div class="tabs"><div class="tab active" data-tab="lookup">Lookup</div><div class="tab" data-tab="bin">BIN Ranges</div><div class="tab" data-tab="history">History</div><div class="tab" data-tab="apps">Apps</div></div></div>\n';
+  // App chrome with Dashboard link and tabs (no History)
+  html += '<div class="bar"><div class="row" style="justify-content:space-between;"><div class="title">Dispatch Command Center</div><div class="topbar-actions"><a class="linkbtn" id="homeBtn" href="./" title="Back to Dashboard">Dashboard</a><button id="fsBtn" title="Fullscreen">Fullscreen</button></div></div><div class="tabs"><div class="tab active" data-tab="lookup">Lookup</div><div class="tab" data-tab="bin">BIN Ranges</div><div class="tab" data-tab="apps">Apps</div></div></div>\n';
 
   html += '<div class="wrap">\n';
 
@@ -185,9 +185,6 @@ function buildDispatchHTML(b64csv) {
   // BIN pane
   html += '<div class="card pane" id="pane-bin" style="display:none"><div class="row"><input id="binInput" inputmode="numeric" placeholder="Enter BIN or ZIP"><button id="binGo">Show Ranges</button></div><div id="binOut" class="card" style="display:none;margin-top:12px"></div></div>\n';
 
-  // History pane
-  html += '<div class="card pane" id="pane-history" style="display:none"><div class="row"><button id="histClear">Clear History</button><button id="histExport" disabled>Export CSV</button></div><div id="histWrap" style="margin-top:12px"></div></div>\n';
-
   // Apps pane
   html += '<div class="card pane" id="pane-apps" style="display:none"><div style="font-weight:600;margin-bottom:8px">Scanner Apps</div><div class="store">';
   html += '<a class="badge play" href="https://play.google.com/store/apps/details?id=com.solvoj.imb.android.app" target="_blank" rel="noopener" aria-label="Get it on Google Play"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26"><polygon points="2,4 18,13 2,22" fill="#34A853"/><polygon points="2,4 12,13 2,13" fill="#FBBC05"/><polygon points="2,22 12,13 2,13" fill="#EA4335"/><polygon points="12,13 18,9.5 18,16.5" fill="#4285F4"/></svg><span class="txt"><span class="sup">Get it on</span><span class="main">Google Play</span></span></a>';
@@ -199,7 +196,7 @@ function buildDispatchHTML(b64csv) {
 
   // App logic
   html += '<script>\n';
-  html += 'var SCHEME=[],HISTORY=[];\n';
+  html += 'var SCHEME=[];\n';
 
   // Tabs
   html += '(function(){var tabs=document.getElementsByClassName("tab");function show(id){for(var i=0;i<tabs.length;i++){var t=tabs[i];var active=t.getAttribute("data-tab")===id;t.className=active?"tab active":"tab";var p=document.getElementById("pane-"+t.getAttribute("data-tab"));if(p)p.style.display=active?"block":"none";}}for(var i=0;i<tabs.length;i++){tabs[i].onclick=(function(t){return function(){show(t.getAttribute("data-tab"));};})(tabs[i]);}})();\n';
@@ -212,6 +209,9 @@ function buildDispatchHTML(b64csv) {
   html += 'function norm11(x){var d=String(x||""),only="";for(var i=0;i<d.length;i++){var ch=d.charCodeAt(i);if(ch>=48&&ch<=57)only+=d.charAt(i);}if(only.length!==5&&only.length!==9&&only.length!==11)return null;var s=(only+"00000000000").slice(0,11);var e=(only+"99999999999").slice(0,11);return{d:only,start:s,end:e};}\n';
   html += 'function bsearch(a,s){var lo=0,hi=a.length-1,ans=-1;while(lo<=hi){var mid=(lo+hi)>>1;if(a[mid].zip11_start<=s){ans=mid;lo=mid+1;}else{hi=mid-1;}}return ans;}\n';
 
+  // Machine mapping for ATL BINs
+  html += 'function machineLabelForBin(b){b=parseInt(b,10);switch(b){case 19:return "Machine 4";case 21:return "Machine 5";case 22:return "Machine 6";case 23:return "Machine 7";case 20:return "Machine 9";case 24:return "Machine 10";case 25:return "Machine 11";case 26:return "Machine 12";case 27:return "Machine 13";case 28:return "Machine 14";case 29:return "Machine 15";case 30:return "Machine 16";case 31:return "Machine 17";case 32:return "Machine 18";default:return null;}}\n';
+
   // Toast helper
   html += 'function showToast(msg, ms){var t=document.getElementById("toast");t.textContent=msg;t.style.display="block";clearTimeout(showToast._t);showToast._t=setTimeout(function(){t.style.display="none";}, ms||5000);} \n';
 
@@ -221,20 +221,17 @@ function buildDispatchHTML(b64csv) {
   // Fullscreen toggle + body class + Esc-to-dashboard when not fullscreen
   html += '(function(){var b=document.getElementById("fsBtn");function setFS(){document.body.classList.toggle("fullscreen", !!document.fullscreenElement);}document.addEventListener("fullscreenchange", setFS);document.addEventListener("keydown",function(e){if(e.key==="Escape" && !document.fullscreenElement){location.href="./";}});b.onclick=function(){var d=document.documentElement;if(!document.fullscreenElement){(d.requestFullscreen||d.webkitRequestFullscreen||d.msRequestFullscreen).call(d);}else{(document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen).call(document);} };setFS();})();\n';
 
-  // Mobile dock padding toggle
-  html += '(function(){function setDock(){document.body.classList.toggle("has-dock", window.matchMedia("(max-width: 900px)").matches);}window.addEventListener("resize",setDock,{passive:true});setDock();})();\n';
+  // Mobile dock padding toggle + focus handling
+  html += '(function(){function setDock(){var has=window.matchMedia("(max-width: 900px)").matches;document.body.classList.toggle("has-dock", has);}window.addEventListener("resize",setDock,{passive:true});setDock();var zip=document.getElementById("zip");zip.addEventListener("focus",function(){setTimeout(function(){try{zip.scrollIntoView({block:"center"});}catch(e){}},150);});})();\n';
 
   // Build keypad
   html += '(function(){var pad=document.getElementById("pad");var keys=["1","2","3","4","5","6","7","8","9","CLR","0","ENTER"];for(var i=0;i<keys.length;i++){var k=document.createElement("button");k.className="key";k.textContent=keys[i];pad.appendChild(k);}})();\n';
 
   // Lookup UI + toast result + Enter key support
-  html += '(function(){var zip=document.getElementById("zip");var out=document.getElementById("out");function render(row){out.style.display="block";clearNode(out);if(!row){out.textContent="No match. Verify ZIP.";showToast("No match",3000);return;}var b=parseInt(row.bin,10);var site=siteLabelForBin(b);var cls=siteClassForBin(b);var h=document.createElement("div");h.className="big "+cls;h.textContent=site;out.appendChild(h);var d=document.createElement("div");d.className="muted";d.textContent="BIN "+row.bin+" • ZIP "+row.zip_start+" to "+row.zip_end;out.appendChild(d);try{if(navigator.vibrate)navigator.vibrate(50);}catch(e){}HISTORY.unshift({ts:Date.now(),zip:zip.value,site:site,bin:row.bin,range:row.zip_start+"-"+row.zip_end});updateHistory();showToast(site+" • BIN "+row.bin,5000);}document.getElementById("go").onclick=function(){var r=lookup(zip.value);render(r);zip.value="";};document.getElementById("pad").onclick=function(e){var t=e.target;if(t.tagName!=="BUTTON")return;var v=t.textContent;if(v==="ENTER"){var r=lookup(zip.value);render(r);zip.value="";return;}if(v==="CLR"){zip.value="";return;}if(zip.value.length>=11)return;zip.value+=v;};zip.addEventListener("keydown",function(e){if(e.key==="Enter"){document.getElementById("go").click();}});function lookup(z){if(!SCHEME.length)return null;var n=norm11(z);if(!n)return null;var tries=[];if(n.d.length===11)tries.push(n);if(n.d.length>=9){var n9=norm11(n.d.slice(0,9));if(n9)tries.push(n9);}var n5=norm11(n.d.slice(0,5));if(n5)tries.push(n5);for(var t=0;t<tries.length;t++){var tt=tries[t];var i=bsearch(SCHEME,tt.start);for(var k=Math.max(0,i-12);k<=Math.min(SCHEME.length-1,i+12);k++){var row=SCHEME[k];if(tt.start>=row.zip11_start&&tt.end<=row.zip11_end)return row;}}var ii=bsearch(SCHEME,n.start);for(var kk=Math.max(0,ii-12);kk<=Math.min(SCHEME.length-1,ii+12);kk++){var r2=SCHEME[kk];if(n.start>=r2.zip11_start&&n.start<=r2.zip11_end)return r2;}return null;}})();\n';
+  html += '(function(){var zip=document.getElementById("zip");var out=document.getElementById("out");function render(row){out.style.display="block";clearNode(out);if(!row){out.textContent="No match. Verify ZIP.";showToast("No match",3000);return;}var b=parseInt(row.bin,10);var site=siteLabelForBin(b);var cls=siteClassForBin(b);var h=document.createElement("div");h.className="big "+cls;h.textContent=site;out.appendChild(h);var d=document.createElement("div");d.className="muted";d.textContent="BIN "+row.bin+" • ZIP "+row.zip_start+" to "+row.zip_end;out.appendChild(d);try{if(navigator.vibrate)navigator.vibrate(50);}catch(e){}var m=machineLabelForBin(b);var toast=m? (site+" • "+m+" (B"+b+")") : (site+" • BIN "+row.bin);showToast(toast,5000);}document.getElementById("go").onclick=function(){var r=lookup(zip.value);render(r);zip.value="";};document.getElementById("pad").onclick=function(e){var t=e.target;if(t.tagName!=="BUTTON")return;var v=t.textContent;if(v==="ENTER"){var r=lookup(zip.value);render(r);zip.value="";return;}if(v==="CLR"){zip.value="";return;}if(zip.value.length>=11)return;zip.value+=v;};zip.addEventListener("keydown",function(e){if(e.key==="Enter"){document.getElementById("go").click();}});function lookup(z){if(!SCHEME.length)return null;var n=norm11(z);if(!n)return null;var tries=[];if(n.d.length===11)tries.push(n);if(n.d.length>=9){var n9=norm11(n.d.slice(0,9));if(n9)tries.push(n9);}var n5=norm11(n.d.slice(0,5));if(n5)tries.push(n5);for(var t=0;t<tries.length;t++){var tt=tries[t];var i=bsearch(SCHEME,tt.start);for(var k=Math.max(0,i-12);k<=Math.min(SCHEME.length-1,i+12);k++){var row=SCHEME[k];if(tt.start>=row.zip11_start&&tt.end<=row.zip11_end)return row;}}var ii=bsearch(SCHEME,n.start);for(var kk=Math.max(0,ii-12);kk<=Math.min(SCHEME.length-1,ii+12);kk++){var r2=SCHEME[kk];if(n.start>=r2.zip11_start&&n.start<=r2.zip11_end)return r2;}return null;}})();\n';
 
   // BIN ranges pane logic
-  html += '(function(){var binGo=document.getElementById("binGo");var binIn=document.getElementById("binInput");var out=document.getElementById("binOut");binGo.onclick=function(){var raw=(binIn.value||"").trim();var digits=raw.replace(/\\D+/g,"");var b=null;if(digits.length===5||digits.length===9||digits.length===11){var row=(function(z){var n=norm11(z);if(!n)return null;var ii=(function(a,s){var lo=0,hi=a.length-1,ans=-1;while(lo<=hi){var mid=(lo+hi)>>1;if(a[mid].zip11_start<=s){ans=mid;lo=mid+1;}else{hi=mid-1;}}return ans;})(SCHEME,n.start);for(var kk=Math.max(0,ii-12);kk<=Math.min(SCHEME.length-1,ii+12);kk++){var r2=SCHEME[kk];if(n.start>=r2.zip11_start&&n.start<=r2.zip11_end)return r2;}return null;})(digits);if(row)b=parseInt(row.bin,10);}if(b==null)b=parseInt(digits,10);out.style.display="block";clearNode(out);if(isNaN(b)){out.textContent="Enter a BIN or a ZIP.";return;}var tbl=document.createElement("table");tbl.className="table";tbl.innerHTML="<thead><tr><th>Label</th><th>ZIP Start</th><th>ZIP End</th><th>Note</th></tr></thead>";var tb=document.createElement("tbody");var count=0;for(var i=0;i<SCHEME.length;i++){var r=SCHEME[i];if(parseInt(r.bin,10)===b){var tr=document.createElement("tr");tr.innerHTML="<td>"+(b>=5&&b<=17?"CHA "+r.bin:b>=18&&b<=32?"ATL "+r.bin:b>=33&&b<=36?"MCO "+r.bin:"BIN "+r.bin)+"</td><td>"+r.zip_start+"</td><td>"+r.zip_end+"</td><td>"+(r.note||"")+"</td>";tb.appendChild(tr);count++;}}if(!count){out.textContent="No rows for that BIN.";return;}tbl.appendChild(tb);out.appendChild(tbl);};})();\n';
-
-  // History
-  html += 'function updateHistory(){var w=document.getElementById("histWrap");var exp=document.getElementById("histExport");var clr=document.getElementById("histClear");clearNode(w);if(!HISTORY.length){exp.disabled=true;w.innerHTML="<div class=\\"muted\\">No lookups yet.</div>";return;}exp.disabled=false;var tbl=document.createElement("table");tbl.className="table";tbl.innerHTML="<thead><tr><th>Time</th><th>ZIP</th><th>Label</th><th>BIN</th><th>Range</th></tr></thead>";var tb=document.createElement("tbody");for(var i=0;i<Math.min(HISTORY.length,200);i++){var r=HISTORY[i];var dt=new Date(r.ts);var tr=document.createElement("tr");tr.innerHTML="<td>"+dt.toLocaleString()+"</td><td>"+r.zip+"</td><td>"+r.site+"</td><td>"+r.bin+"</td><td>"+r.range+"</td>";tb.appendChild(tr);}tbl.appendChild(tb);w.appendChild(tbl);clr.onclick=function(){HISTORY=[];updateHistory();};exp.onclick=function(){var lines=["time,zip,label,bin,range"];for(var j=0;j<HISTORY.length;j++){var rr=HISTORY[j];lines.push([new Date(rr.ts).toISOString(),rr.zip,rr.site,rr.bin,rr.range].join(","));}var csv=lines.join("\\n");var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="lookup_history.csv";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},800);};}\n';
+  html += '(function(){var binGo=document.getElementById("binGo");var binIn=document.getElementById("binInput");var out=document.getElementById("binOut");binGo.onclick=function(){var raw=(binIn.value||"").trim();var digits=raw.replace(/\\D+/g,"");var b=null;if(digits.length===5||digits.length===9||digits.length===11){var row=(function(z){var n=norm11(z);if(!n)return null;var ii=(function(a,s){var lo=0,hi=a.length-1,ans=-1;while(lo<=hi){var mid=(lo+hi)>>1;if(a[mid].zip11_start<=s){ans=mid;lo=mid+1;}else{hi=mid-1;}}return ans;})(SCHEME,n.start);for(var kk=Math.max(0,ii-12);kk<=Math.min(SCHEME.length-1,ii+12);kk++){var r2=SCHEME[kk];if(n.start>=r2.zip11_start&&n.start<=r2.zip11_end)return r2;}return null;})(digits);if(row)b=parseInt(row.bin,10);}if(b==null)b=parseInt(digits,10);out.style.display="block";clearNode(out);if(isNaN(b)){out.textContent="Enter a BIN or a ZIP.";return;}var tbl=document.createElement("table");tbl.className="table";tbl.innerHTML="<thead><tr><th>Label</th><th>ZIP Start</th><th>ZIP End</th><th>Note</th></tr></thead>";var tb=document.createElement("tbody");var count=0;for(var i=0;i<SCHEME.length;i++){var r=SCHEME[i];if(parseInt(r.bin,10)===b){var tr=document.createElement("tr");var lab=(b>=5&&b<=17?("CHA "+r.bin):(b>=18&&b<=32?("ATL "+r.bin):(b>=33&&b<=36?("MCO "+r.bin):("BIN "+r.bin))));tr.innerHTML="<td>"+lab+"</td><td>"+r.zip_start+"</td><td>"+r.zip_end+"</td><td>"+(r.note||"")+"</td>";tb.appendChild(tr);count++;}}if(!count){out.textContent="No rows for that BIN.";return;}tbl.appendChild(tb);out.appendChild(tbl);};})();\n';
 
   html += '</script>\n';
   return html;
