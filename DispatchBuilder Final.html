@@ -1,0 +1,238 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scheme → Dispatch HTML Builder (ES5, Base64, DOM safe, IMB enabled)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font:16px system-ui, -apple-system, Segoe UI, Roboto; margin:20px; max-width:1000px; }
+  h1 { font-size:22px; margin:0 0 12px; }
+  h2 { font-size:18px; margin:18px 0 8px; }
+  textarea { width:100%; height:280px; font:13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:12px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .card { border:1px solid #ddd; border-radius:10px; padding:12px; margin:10px 0; }
+  button { font:15px; padding:8px 12px; }
+  input[type="text"] { font:15px; padding:8px; width:280px; }
+  .muted { color:#666; font-size:12px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #csvPreview { white-space:pre; overflow:auto; max-height:220px; background:#fafafa; border:1px solid #eee; padding:12px; }
+  #status { margin-top:6px; }
+  /* Touch: prevent scroll pinch on the experimental canvas */
+  #expCanvas { touch-action: none; }
+</style>
+</head>
+<body>
+<h1>Scheme to Dispatch HTML Builder</h1>
+<p>This builds a single-file Dispatch app with ZIP lookup and Supervisor IMB parsing. ES5 only, Base64 CSV embed, DOM-safe, no regex.</p>
+
+<div class="card">
+  <h2>1) Paste .scm contents</h2>
+  <textarea id="scm" placeholder="Paste your entire scheme file here..."></textarea>
+  <div class="row">
+    <div>
+      <label>Output file name</label><br>
+      <input id="outfile" type="text" value="dispatch.html">
+    </div>
+    <div style="align-self:end;">
+      <button id="build">Convert and Build HTML</button>
+    </div>
+  </div>
+  <div id="status" class="muted">Idle</div>
+</div>
+
+<div class="card">
+  <h2>2) CSV preview</h2>
+  <div id="csvPreview" class="mono"></div>
+</div>
+
+<div class="card">
+  <h2>3) Download</h2>
+  <button id="download" disabled>Download dispatch.html</button>
+  <div class="muted">Open the downloaded file directly on phone or PC. On iOS, use Open in Safari, not the Files preview.</div>
+</div>
+
+<script>
+/* ---------- Shared helpers ---------- */
+function replaceAll(str, find, repl) {
+  var out = String(str);
+  var idx;
+  while ((idx = out.indexOf(find)) !== -1) {
+    out = out.slice(0, idx) + repl + out.slice(idx + find.length);
+  }
+  return out;
+}
+function expand3To5(a, b) { return [a + "00", b + "99"]; }
+function isDigits(str, count) {
+  if (String(str).length !== count) return false;
+  for (var i=0;i<str.length;i++){ var ch=str.charCodeAt(i); if (ch<48||ch>57) return false; }
+  return true;
+}
+function normalizeTokenToRange(token) {
+  token = String(token||"").trim();
+  if (!token) return null;
+  var dash = token.indexOf('-');
+  if (dash !== -1) {
+    var A = String(token.slice(0,dash)).trim();
+    var B = String(token.slice(dash+1)).trim();
+    if (isDigits(A,5) && isDigits(B,5)) return {zip_start:A,zip_end:B};
+    if (isDigits(A,3) && isDigits(B,3)) {
+      var e = expand3To5(A,B), s=e[0], t=e[1];
+      while (s.length<5) s='0'+s; while (t.length<5) t='0'+t;
+      return {zip_start:s,zip_end:t};
+    }
+    return null;
+  } else {
+    if (isDigits(token,5)) return {zip_start:token,zip_end:token};
+    if (isDigits(token,3)) {
+      var e2 = expand3To5(token,token), s2=e2[0], t2=e2[1];
+      while (s2.length<5) s2='0'+s2; while (t2.length<5) t2='0'+t2;
+      return {zip_start:s2,zip_end:t2};
+    }
+    return null;
+  }
+}
+function parseSchemeToRows(text) {
+  var rows=[], txt=String(text||"");
+  var CR=String.fromCharCode(13), LF=String.fromCharCode(10);
+  txt = replaceAll(txt, CR, "");
+  var lines = txt.split(LF);
+  for (var i=0;i<lines.length;i++){
+    var line = String(lines[i]||"").trim();
+    if (!line) continue;
+    if (line.charAt(0)==='"' && line.charAt(line.length-1)==='"') line=line.slice(1,-1);
+    var parts = line.split('*'); if (parts.length<4) continue;
+    var bin = String(parts[0]||"").trim();
+    var machine = String(parts[1]||"").trim();
+    var zipsPart = String(parts[3]||"").trim();
+    if (!bin || !isDigits(bin, bin.length)) continue;
+    var tokens = zipsPart.split(',');
+    for (var j=0;j<tokens.length;j++){
+      var tok = String(tokens[j]||"").trim(); if (!tok) continue;
+      var range = normalizeTokenToRange(tok); if (!range) continue;
+      var a=range.zip_start, b=range.zip_end;
+      rows.push({ zip_start:a, zip_end:b, bin:bin, machine:machine, note:"", zip11_start:a+"00000"+"0", zip11_end:b+"99999"+"9" });
+    }
+  }
+  var seen={}, out=[];
+  for (var k=0;k<rows.length;k++){ var r=rows[k]; var key=[r.zip_start,r.zip_end,r.bin,r.machine].join('|'); if(seen[key]) continue; seen[key]=true; out.push(r); }
+  out.sort(function(a,b){
+    var bn=Number(a.bin)-Number(b.bin);
+    if(bn!==0) return bn;
+    if(a.zip_start!==b.zip_start) return a.zip_start<b.zip_start?-1:1;
+    return a.zip_end<b.zip_end?-1:1;
+  });
+  return out;
+}
+function toCSV(rows) {
+  var header=["zip_start","zip_end","bin","machine","note","zip11_start","zip11_end"];
+  var lines=[header.join(',')];
+  var LF=String.fromCharCode(10);
+  for (var i=0;i<rows.length;i++){ var r=rows[i]; lines.push([r.zip_start,r.zip_end,r.bin,r.machine,r.note,r.zip11_start,r.zip11_end].join(',')); }
+  return lines.join(LF);
+}
+function b64encode(str){ return btoa(unescape(encodeURIComponent(str))); }
+
+/* ---------- Build the generated dispatch.html ---------- */
+function buildDispatchHTML(b64csv){
+  // Single-file app with ZIP lookup and IMB parsing. Static BIN→Machine mapping included.
+  var html='';
+  html+='<!doctype html>\n<meta charset="utf-8">\n<title>Dispatch Lookup — Offline</title>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n';
+  html+='<style>\nbody{font:18px system-ui,-apple-system,Segoe UI;margin:24px;max-width:840px}input[type="text"]{font:22px;padding:10px 12px}button{font:16px;padding:8px 12px}.card{margin-top:16px;padding:14px;border:1px solid #ccc;border-radius:12px}.bin{font-size:64px;font-weight:800}.muted{font-size:12px;color:#666}#out{display:none}\nvideo{max-width:100%;}\ncanvas{max-width:100%;}\n#expCanvas{touch-action:none}\n</style>\n';
+  html+='<h1>Dispatch Offline — ZIP & IMB</h1>\n<div class="muted">CSV embedded. Works fully offline in a real browser tab.</div>\n';
+  html+='<div class="card"><div><b>ZIP Lookup</b></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><input id="zip" inputmode="numeric" maxlength="11" placeholder="Enter 5, 9, or 11-digit routing ZIP"><button id="go">Lookup</button></div><div id="out" class="card" style="margin-top:12px"></div></div>\n';
+  html+='<div class="card"><div style="font-weight:600;margin-bottom:4px">Supervisor: IMB Tools</div><div class="muted" style="margin-bottom:6px">Paste IMB numeric string (length 20, 25, 29, or 31). We parse fields and use routing digits for BIN lookup.</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="imbInput" placeholder="IMB digits" style="flex:1;min-width:260px;padding:8px;font:16px ui-monospace,Menlo,Consolas"><select id="miLen" style="padding:8px"><option value="6">Mailer ID length: 6</option><option value="9">Mailer ID length: 9</option></select><button id="imbParse">Parse IMB</button></div><div id="imbOut" class="card" style="display:none;margin-top:10px"></div></div>\n';
+
+  /* --- Camera scan block (offline, uses decodeIMBImage hook) --- */
+  html+='<div class="card"><div style="font-weight:600;margin-bottom:6px">Scan IMB (camera)</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button id="camStart">Open Camera</button><button id="camSnap" disabled>Snap</button><button id="camStop" disabled>Close</button></div><video id="camView" playsinline style="width:100%;max-height:240px;margin-top:8px;display:none"></video><canvas id="camCanvas" style="display:none"></canvas><div class="muted" style="margin-top:6px">Tip: camera requires HTTPS or a PWA install on mobile browsers.</div></div>\n';
+
+  /* --- Experimental manual decoder (F/D/A/T classifier) --- */
+  html+='<div class="card" id="expDecoder"><div style="font-weight:600;margin-bottom:6px">Experimental IMB from Photo (offline)</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button id="expOpen">Open Camera</button><button id="expSnap" disabled>Snap</button><button id="expClose" disabled>Close</button><button id="expMeasure" disabled>Classify 65 bars</button></div><video id="expView" playsinline style="width:100%;max-height:260px;margin-top:8px;display:none"></video><canvas id="expCanvas" style="width:100%;max-height:260px;display:none;margin-top:8px;border:1px solid #ccc"></canvas><div class="muted" style="margin-top:6px">Drag the <b>Baseline</b> (blue) and <b>Topline</b> (pink) to bracket the bars, then “Classify”.</div><div id="expStates" class="mono" style="margin-top:8px;white-space:pre-wrap;"></div></div>\n';
+
+  html+='<script id="scheme_b64" type="text/plain">\n'+b64csv+'\n</'+'script>\n';
+  html+='<script>\n';
+  html+='var SCHEME=[];\n';
+  html+='var BIN_TO_MACHINE={19:4,21:5,22:6,23:7,20:9,24:10,25:11,26:12,27:13,28:14,29:15,30:16,31:17,32:18};\n';
+
+  // Utilities
+  html+='function replaceAll(s,f,r){var o=String(s),i;while((i=o.indexOf(f))!==-1){o=o.slice(0,i)+r+o.slice(i+f.length);}return o;}\n';
+  html+='function clearNode(el){while(el.firstChild)el.removeChild(el.firstChild);} \n';
+
+  // CSV parse
+  html+='function parseCSV(t){var CR=String.fromCharCode(13),LF=String.fromCharCode(10);t=String(t||"");t=replaceAll(t,CR,"");var lines=t.trim().split(LF);if(!lines.length)return[];var header=lines.shift().split(",");var idx={},i;for(i=0;i<header.length;i++){idx[header[i].trim()]=i;}var need=["zip_start","zip_end","bin","machine","note","zip11_start","zip11_end"];for(i=0;i<need.length;i++){if(!(need[i] in idx))throw new Error("Missing column: "+need[i]);}var rows=[],j;for(j=0;j<lines.length;j++){var l=lines[j];if(!l)continue;var c=l.split(",");rows.push({zip_start:c[idx.zip_start],zip_end:c[idx.zip_end],bin:c[idx.bin],machine:c[idx.machine],note:c[idx.note]||"",zip11_start:c[idx.zip11_start],zip11_end:c[idx.zip11_end]});}rows.sort(function(a,b){return a.zip11_start<b.zip11_start?-1:1});return rows;}\n';
+
+  // ZIP normalization and binary search
+  html+='function norm11(x){var d=String(x||""),only="";for(var i=0;i<d.length;i++){var ch=d.charCodeAt(i);if(ch>=48&&ch<=57)only+=d.charAt(i);}if(only.length!==5&&only.length!==9&&only.length!==11)return null;var s=(only+"00000000000").slice(0,11);var e=(only+"99999999999").slice(0,11);return{d:only,start:s,end:e};}\n';
+  html+='function bsearch(a,s){var lo=0,hi=a.length-1,ans=-1;while(lo<=hi){var mid=(lo+hi)>>1;if(a[mid].zip11_start<=s){ans=mid;lo=mid+1;}else{hi=mid-1;}}return ans;}\n';
+  html+='function lookup(zip){if(!SCHEME.length)return null;var n=norm11(zip);if(!n)return null;var tries=[];if(n.d.length===11)tries.push(n);if(n.d.length>=9){var n9=norm11(n.d.slice(0,9));if(n9)tries.push(n9);}var n5=norm11(n.d.slice(0,5));if(n5)tries.push(n5);for(var t=0;t<tries.length;t++){var tt=tries[t];var i=bsearch(SCHEME,tt.start);for(var k=Math.max(0,i-12);k<=Math.min(SCHEME.length-1,i+12);k++){var row=SCHEME[k];if(tt.start>=row.zip11_start&&tt.end<=row.zip11_end)return row;}}var ii=bsearch(SCHEME,n.start);for(var kk=Math.max(0,ii-12);kk<=Math.min(SCHEME.length-1,ii+12);kk++){var r2=SCHEME[kk];if(n.start>=r2.zip11_start&&n.start<=r2.zip11_end)return r2;}return null;}\n';
+
+  // Result rendering
+  html+='function renderResult(row, note){var out=document.getElementById("out");out.style.display="block";clearNode(out);if(!row){out.textContent="No scheme match. See supervisor.";return;}var b=parseInt(row.bin,10);if(isNaN(b))b=String(row.bin||"");var phys=null;if(typeof b==="number"){if(BIN_TO_MACHINE.hasOwnProperty(b))phys=BIN_TO_MACHINE[b];else{var pm=parseInt(row.machine,10);if(!isNaN(pm))phys=pm;}}else{phys=String(row.machine||"");}var d1=document.createElement("div");d1.className="bin";d1.textContent="BIN "+b;out.appendChild(d1);var d2=document.createElement("div");d2.textContent="Machine "+(phys==null?"":phys);out.appendChild(d2);if(note){var d0=document.createElement("div");d0.textContent=note;out.appendChild(d0);}var d3=document.createElement("div");d3.textContent=row.note||"";out.appendChild(d3);var d4=document.createElement("div");d4.className="muted";d4.textContent="ZIP "+row.zip_start+" to "+row.zip_end;out.appendChild(d4);} \n';
+
+  // IMB parsing (digits -> fields)
+  html+='function parseIMB(s,mi){var d=String(s||""),only="";for(var i=0;i<d.length;i++){var ch=d.charCodeAt(i);if(ch>=48&&ch<=57)only+=d.charAt(i);}var L=only.length;if(!(L===20||L===25||L===29||L===31))return{ok:false,err:"Length "+L+" not in {20,25,29,31}"};mi=parseInt(mi,10);if(mi!==6&&mi!==9)mi=6;var rcLen=L-20;var pos=0;var barcodeID=only.slice(pos,pos+2);pos+=2;var stid=only.slice(pos,pos+3);pos+=3;var mailerID=only.slice(pos,pos+mi);pos+=mi;var serial=only.slice(pos,pos+(15-mi));pos+=(15-mi);var routing=only.slice(pos,pos+rcLen);return{ok:true,raw:only,len:L,barcodeID:barcodeID,stid:stid,mailerID:mailerID,serial:serial,routing:routing};}\n';
+  html+='function renderIMB(o){var box=document.getElementById("imbOut");box.style.display="block";clearNode(box);var add=function(a,b){var d=document.createElement("div");d.textContent=a+" "+b;box.appendChild(d);};if(!o.ok){add("Error:",o.err||"parse failed");return;}add("Barcode ID:",o.barcodeID);add("Service Type ID:",o.stid);add("Mailer ID:",o.mailerID);add("Serial:",o.serial);if(o.routing){var z5="",z9="",dp="";if(o.routing.length>=5)z5=o.routing.slice(0,5);if(o.routing.length>=9)z9=o.routing.slice(0,9);if(o.routing.length===11)dp=o.routing.slice(9,11);if(z5)add("ZIP (5):",z5);if(z9)add("ZIP (9):",z9);if(dp)add("Delivery Point:",dp);}if(o.routing&&(o.routing.length===5||o.routing.length===9||o.routing.length===11)){var row=lookup(o.routing);renderResult(row,"From IMB routing "+o.routing);} }\n';
+
+  // Wire up core UI
+  html+='(function(){var csv=decodeURIComponent(escape(atob(document.getElementById("scheme_b64").textContent)));SCHEME=parseCSV(csv);var zip=document.getElementById("zip");zip.focus();document.getElementById("go").onclick=function(){var row=lookup(zip.value);renderResult(row);zip.value="";zip.focus();};var imbIn=document.getElementById("imbInput");var miSel=document.getElementById("miLen");document.getElementById("imbParse").onclick=function(){var res=parseIMB(imbIn.value,miSel.value);renderIMB(res);};})();\n';
+
+  // Camera scan (hooked to decodeIMBImage)
+  html+='(function(){var v=document.getElementById("camView"),c=document.getElementById("camCanvas");var sBtn=document.getElementById("camStart"),pBtn=document.getElementById("camSnap"),xBtn=document.getElementById("camStop");var stream=null;function stop(){if(stream){var tr=stream.getTracks();for(var i=0;i<tr.length;i++)tr[i].stop();stream=null;}v.style.display="none";v.srcObject=null;pBtn.disabled=true;xBtn.disabled=true;}sBtn.onclick=function(){if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("Camera not available in this browser.");return;}navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false}).then(function(st){stream=st;v.srcObject=st;v.style.display="block";v.play();pBtn.disabled=false;xBtn.disabled=false;}).catch(function(){alert("Camera permission denied or unavailable.");});};xBtn.onclick=stop;pBtn.onclick=function(){if(!stream)return;var w=v.videoWidth||640,h=v.videoHeight||480;c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(v,0,0,w,h);var img=ctx.getImageData(0,0,w,h);decodeIMBImage(img,function(res){if(!res||!res.ok){alert("Could not decode IMB from photo. Try better lighting and centering.");return;}var digits=res.digits||"";document.getElementById("imbInput").value=digits;var mi=document.getElementById("miLen").value;var out=parseIMB(digits,mi);renderIMB(out);});};window.decodeIMBImage=window.decodeIMBImage||function(_,cb){cb({ok:false});};})();\n';
+
+  // Experimental manual classifier (F/D/A/T) with touch support
+  html+='(function(){var v=document.getElementById("expView"),cv=document.getElementById("expCanvas"),ctx=cv.getContext("2d");var oBtn=document.getElementById("expOpen"),sBtn=document.getElementById("expSnap"),xBtn=document.getElementById("expClose"),mBtn=document.getElementById("expMeasure"),out=document.getElementById("expStates");var stream=null;var guide={topY:40,baseY:80,drag:null};function drawGuides(){var w=cv.width,h=cv.height;ctx.strokeStyle="#ff0066";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,guide.topY);ctx.lineTo(w,guide.topY);ctx.stroke();ctx.strokeStyle="#00aaff";ctx.beginPath();ctx.moveTo(0,guide.baseY);ctx.lineTo(w,guide.baseY);ctx.stroke();ctx.fillStyle="#ff0066";ctx.fillRect(4,guide.topY-5,10,10);ctx.fillStyle="#00aaff";ctx.fillRect(4,guide.baseY-5,10,10);}function within(y,a){return Math.abs(y-a)<=10;}cv.addEventListener("mousedown",function(e){var r=cv.getBoundingClientRect();var y=e.clientY-r.top;if(within(y,guide.topY))guide.drag="top";else if(within(y,guide.baseY))guide.drag="base";});cv.addEventListener("mousemove",function(e){if(!guide.drag)return;var r=cv.getBoundingClientRect();var y=e.clientY-r.top;if(guide.drag==="top")guide.topY=Math.max(0,Math.min(cv.height-1,y|0));else guide.baseY=Math.max(0,Math.min(cv.height-1,y|0));var img=ctx.getImageData(0,0,cv.width,cv.height);ctx.putImageData(img,0,0);drawGuides();});window.addEventListener("mouseup",function(){guide.drag=null;});\n';
+  // Touch events
+  html+='function getTouchY(ev){var t=ev.touches&&ev.touches[0]?ev.touches[0]:null;if(!t)return null;var r=cv.getBoundingClientRect();return t.clientY-r.top;}\n';
+  html+='cv.addEventListener("touchstart",function(e){var y=getTouchY(e);if(y==null)return;if(within(y,guide.topY))guide.drag="top";else if(within(y,guide.baseY))guide.drag="base";e.preventDefault();},{passive:false});\n';
+  html+='cv.addEventListener("touchmove",function(e){if(!guide.drag)return;var y=getTouchY(e);if(y==null)return;if(guide.drag==="top")guide.topY=Math.max(0,Math.min(cv.height-1,y|0));else guide.baseY=Math.max(0,Math.min(cv.height-1,y|0));var img=ctx.getImageData(0,0,cv.width,cv.height);ctx.putImageData(img,0,0);drawGuides();e.preventDefault();},{passive:false});\n';
+  html+='window.addEventListener("touchend",function(){guide.drag=null;},{passive:true});\n';
+  // Camera control and measure
+  html+='function stop(){if(stream){var tr=stream.getTracks();for(var i=0;i<tr.length;i++)tr[i].stop();stream=null;}v.style.display="none";v.srcObject=null;sBtn.disabled=true;xBtn.disabled=true;mBtn.disabled=(cv.width===0);}oBtn.onclick=function(){if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("Camera not available. Use HTTPS or PWA.");return;}navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false}).then(function(st){stream=st;v.srcObject=st;v.style.display="block";v.play();sBtn.disabled=false;xBtn.disabled=false;}).catch(function(){alert("Camera permission denied or unavailable.");});};xBtn.onclick=stop;sBtn.onclick=function(){if(!stream)return;var w=v.videoWidth||640,h=v.videoHeight||480;cv.width=w;cv.height=h;ctx.drawImage(v,0,0,w,h);v.style.display="none";cv.style.display="block";guide.baseY=(h*0.55)|0;guide.topY=(h*0.35)|0;drawGuides();mBtn.disabled=false;};mBtn.onclick=function(){if(cv.width===0)return;var w=cv.width,h=cv.height;var topY=Math.min(guide.topY,guide.baseY),baseY=Math.max(guide.topY,guide.baseY);var bandH=baseY-topY;if(bandH<20){alert("Increase distance between lines to include full bars.");return;}var left=(w*0.10)|0,right=(w*0.90)|0,span=right-left,cols=65,states=[],i;function lumAt(x,y){var d=ctx.getImageData(x,y,1,1).data;return (d[0]*3+d[1]*6+d[2]*1)/10;}function hasAbove(x){var y,limit=Math.max(1,(bandH*0.33)|0);for(y=topY;y<baseY;y++){if(lumAt(x,y)<128){if(baseY-y>limit)return true;}}return false;}function hasBelow(x){var y,limit=Math.max(1,(bandH*0.33)|0);for(y=baseY;y<h;y++){if(lumAt(x,y)<128){if(y-baseY>limit)return true;}}return false;}function hasAtBase(x){var y0=Math.max(0,baseY-2),y1=Math.min(h-1,baseY+2),y,dk=0,tt=0;for(y=y0;y<=y1;y++){if(lumAt(x,y)<128)dk++;tt++;}return dk>=tt*0.5;}for(i=0;i<cols;i++){var x=left+(((i+0.5)/cols)*span)|0;var ab=hasAbove(x),bl=hasBelow(x),md=hasAtBase(x);var ch="T";if(ab&&bl)ch="F";else if(ab&&!bl)ch="A";else if(!ab&&bl)ch="D";else ch="T";states.push(ch);}var s=states.join("");out.textContent="States (65): "+s+(s.length===65?"":"  [unexpected length "+s.length+"]");var decoded=decodeImbStatesToDigits(states);if(decoded&&decoded.ok){document.getElementById("imbInput").value=decoded.digits;var res=parseIMB(decoded.digits,document.getElementById("miLen").value);renderIMB(res);}};window.decodeImbStatesToDigits=window.decodeImbStatesToDigits||function(statesArray){return null;};})();\n';
+
+  html+='</'+'script>\n';
+  return html;
+}
+
+/* ---------- Wire up the builder page ---------- */
+function downloadFile(name, content) {
+  var blob = new Blob([content], {type: 'text/html;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = name || 'dispatch.html';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+
+document.getElementById('build').addEventListener('click', function(){
+  var scm = document.getElementById('scm').value;
+  var outname = document.getElementById('outfile').value || 'dispatch.html';
+  var status = document.getElementById('status');
+  status.textContent = 'Parsing .scm...';
+
+  try {
+    var rows = parseSchemeToRows(scm);
+    if (!rows.length) { status.innerHTML = '<span class="err">No rows parsed. Check input format.</span>'; return; }
+    var csv = toCSV(rows);
+    var LF = String.fromCharCode(10);
+    document.getElementById('csvPreview').textContent = csv.split(LF).slice(0,60).join(LF) + LF + '...';
+    status.innerHTML = 'Parsed <b>' + rows.length + '</b> rows. Building HTML...';
+    var b64 = b64encode(csv);
+    var html = buildDispatchHTML(b64);
+    window._builtHTML = html;
+    window._outname = outname;
+    document.getElementById('download').disabled = false;
+    status.innerHTML = '<span class="ok">Build ready.</span> Click Download.';
+  } catch (e) {
+    status.innerHTML = '<span class="err">Error:</span> ' + e.message;
+    console.error(e);
+  }
+});
+
+document.getElementById('download').addEventListener('click', function(){
+  if (!window._builtHTML) return;
+  downloadFile(window._outname, window._builtHTML);
+});
+</script>
+</body>
+</html>
