@@ -1,6 +1,6 @@
 // tools/build.js
 // Builds DispatchTool.html from data/scheme.txt and writes version.json
-// Mobile-first kiosk: docked bottom keypad on phones, big targets, 5s toast, Dashboard button
+// Mobile-first kiosk: docked keypad on phones, big targets, 5s toast, Dashboard button
 
 const fs = require('fs');
 const path = require('path');
@@ -108,8 +108,11 @@ function buildDispatchHTML(b64csv) {
   html += '.shell{min-height:100svh;display:flex;flex-direction:column}\n';
   html += '.bar{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.9);backdrop-filter:saturate(180%) blur(8px);padding:10px 12px;border-bottom:1px solid var(--line)}\n';
   html += '.title{font-size:18px;font-weight:700} .muted{color:var(--muted);font-size:12px}\n';
-  html += '.tabs{display:flex;gap:8px;overflow:auto;padding:8px 0}\n';
-  html += '.tab{padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#1a1f2b;cursor:pointer;white-space:nowrap}\n';
+
+  // compact tabs and header
+  html += '.tabs{display:flex;gap:8px;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;padding:8px 0;margin:6px 0}\n';
+  html += '.tabs::-webkit-scrollbar{display:none}\n';
+  html += '.tab{flex:0 0 auto;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#1a1f2b;cursor:pointer}\n';
   html += '.tab.active{background:#1f2a3f;border-color:#4d6cff}\n';
   html += '.wrap{flex:1 1 auto;width:100%;max-width:1200px;margin:0 auto;padding:12px}\n';
   html += '.card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:12px 0}\n';
@@ -127,33 +130,31 @@ function buildDispatchHTML(b64csv) {
   html += '.badge .sup{font-size:12px;opacity:.9} .badge .main{font-size:18px;font-weight:700;letter-spacing:.2px}\n';
   html += '.badge.play{background:#121212;color:#fff} .badge.appstore{background:#000;color:#fff}\n';
   html += '.pill{padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:#121827}\n';
-  html += '.topbar-actions{display:flex;gap:8px;align-items:center}\n';
+  html += '.topbar-actions{display:flex;gap:8px;align-items:center;flex-wrap:nowrap}\n';
+  html += '@media (max-width:600px){.topbar-actions .linkbtn,.topbar-actions button{font-size:14px;padding:8px 10px;border-radius:10px}}\n';
   html += 'a.linkbtn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:var(--fg);background:#1c2230;border:1px solid var(--line);padding:10px 14px;border-radius:12px}\n';
   html += 'a.linkbtn:hover{filter:brightness(1.08)}\n';
 
-  // Kiosk grid for large screens
+  // kiosk layout for large screens
   html += '.pane{max-width:1200px;margin:0 auto}\n';
   html += '.kiosk{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}\n';
   html += '@media (max-width:900px){.kiosk{grid-template-columns:1fr}}\n';
 
-  // Keypad styles
-  html += '.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}\n';
-  html += '.key{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3.8vh,34px);padding:clamp(14px,3.2vh,26px);border-radius:12px;border:1px solid var(--line);background:#131826}\n';
-
-  // Docked keypad on phones
+  // keypad grid and dock
+  html += '.keypad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(4,1fr);gap:10px;height:100%}\n';
+  html += '.key{display:flex;align-items:center;justify-content:center;height:100%;font-size:clamp(22px,3.8vh,34px);border-radius:12px;border:1px solid var(--line);background:#131826}\n';
   html += '.keypad-dock{display:block}\n';
   html += '@media (max-width:900px){\n';
-  html += '  .keypad-dock{position:fixed;left:0;right:0;bottom:0;background:rgba(13,18,26,.96);backdrop-filter:saturate(160%) blur(6px);border-top:1px solid var(--line);padding:12px env(safe-area-inset-right) calc(12px + env(safe-area-inset-bottom)) env(safe-area-inset-left);height:42svh;z-index:9}\n';
-  html += '  body.has-dock{padding-bottom:45svh}\n';
-  html += '  #zip{font-size:clamp(22px,3.6vh,36px)}\n';
-  html += '  #go{font-size:clamp(18px,3.0vh,28px)}\n';
-  html += '  .big{font-size:clamp(40px,7.5vh,80px)}\n';
+  html += '  .keypad-dock{position:fixed;left:0;right:0;bottom:0;background:rgba(13,18,26,.96);backdrop-filter:saturate(160%) blur(6px);border-top:1px solid var(--line);padding:12px env(safe-area-inset-right) calc(12px + env(safe-area-inset-bottom)) env(safe-area-inset-left);height:52svh;z-index:9}\n';
+  html += '  body.has-dock{padding-bottom:55svh}\n';
+  html += '  #zip{font-size:clamp(22px,3.6vh,36px)} #go{font-size:clamp(18px,3.0vh,28px)} .big{font-size:clamp(40px,7.5vh,80px)}\n';
   html += '}\n';
-  html += 'body.fullscreen .keypad-dock{height:58svh}\n';
-  html += 'body.fullscreen.has-dock{padding-bottom:61svh}\n';
+  html += 'body.fullscreen .keypad-dock{height:66svh}\n';
+  html += 'body.fullscreen.has-dock{padding-bottom:69svh}\n';
 
-  // Toast popup
+  // toast
   html += '#toast{position:fixed;left:50%;top:12%;transform:translateX(-50%);background:rgba(20,25,36,.95);border:1px solid var(--line);border-radius:16px;padding:16px 20px;z-index:9999;display:none;box-shadow:0 14px 40px rgba(0,0,0,.45);font-size:clamp(24px,6.2vh,52px);font-weight:800;letter-spacing:.4px;text-align:center}\n';
+  html += '@media (max-width:600px){.pill{padding:6px 8px;font-size:11px}}\n';
   html += '</style>\n';
 
   // Single scheme payload
