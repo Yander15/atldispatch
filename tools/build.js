@@ -237,7 +237,7 @@ function buildDispatchHTML(b64csv) {
   return html;
 }
 
-// ---------- Build process ----------
+// --------- Build process ---------
 const schemePath = path.join(process.cwd(), 'data', 'scheme.txt');
 if (!fs.existsSync(schemePath)) {
   console.error('data/scheme.txt not found. Upload a scheme file to data/ and commit.');
