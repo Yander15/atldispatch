@@ -1,11 +1,11 @@
 // tools/build.js
 // Builds DispatchTool.html from data/scheme.txt and writes version.json
-// Kiosk mode: big keypad, fullscreen friendly, 5s popup, Dashboard button
+// Mobile-first kiosk: docked bottom keypad on phones, big targets, 5s toast, Dashboard button
 
 const fs = require('fs');
 const path = require('path');
 
-// ---------- Helpers (ported from your generator) ----------
+// ---------- Helpers ----------
 function replaceAll(str, find, repl) {
   let out = String(str), idx;
   while ((idx = out.indexOf(find)) !== -1) out = out.slice(0, idx) + repl + out.slice(idx + find.length);
@@ -97,22 +97,24 @@ function toCSV(rows) {
 }
 function b64encodeUtf8(str) { return Buffer.from(str, 'utf8').toString('base64'); }
 
-// ---------- HTML builder with kiosk UX ----------
+// ---------- HTML builder with mobile docked keypad ----------
 function buildDispatchHTML(b64csv) {
   let html = '';
   html += '<!doctype html>\n<meta charset="utf-8">\n<title>Dispatch Command Center - Offline</title>\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">\n';
   html += '<style>\n';
   html += ':root{--bg:#0f1115;--fg:#e8eaf0;--muted:#9aa3b2;--card:#171a21;--line:#2a2f3a;--accent:#7aa2ff;--green:#1fbf75;--orange:#ff9f40;--blue:#4ea1ff}\n';
-  html += 'html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,-apple-system,"Segoe UI",Roboto}\n';
-  html += '.bar{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.85);backdrop-filter:saturate(180%) blur(8px);padding:10px 12px;border-bottom:1px solid var(--line)}\n';
+  html += 'html,body{height:100%}\n';
+  html += 'body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,-apple-system,"Segoe UI",Roboto}\n';
+  html += '.shell{min-height:100svh;display:flex;flex-direction:column}\n';
+  html += '.bar{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.9);backdrop-filter:saturate(180%) blur(8px);padding:10px 12px;border-bottom:1px solid var(--line)}\n';
   html += '.title{font-size:18px;font-weight:700} .muted{color:var(--muted);font-size:12px}\n';
   html += '.tabs{display:flex;gap:8px;overflow:auto;padding:8px 0}\n';
   html += '.tab{padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#1a1f2b;cursor:pointer;white-space:nowrap}\n';
   html += '.tab.active{background:#1f2a3f;border-color:#4d6cff}\n';
-  html += '.wrap{padding:14px;max-width:1200px;margin:0 auto}\n';
-  html += '.card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:14px 0}\n';
+  html += '.wrap{flex:1 1 auto;width:100%;max-width:1200px;margin:0 auto;padding:12px}\n';
+  html += '.card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:12px 0}\n';
   html += '.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}\n';
-  html += 'input[type=text]{font:22px system-ui;letter-spacing:1px;width:260px;padding:12px;border-radius:12px;border:1px solid var(--line);background:#101521;color:var(--fg)}\n';
+  html += 'input[type=text]{font:22px system-ui;letter-spacing:1px;width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);background:#101521;color:var(--fg)}\n';
   html += 'button{font:18px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:#1c2230;color:var(--fg);cursor:pointer}\n';
   html += '.big{font-size:64px;font-weight:900;letter-spacing:.5px}\n';
   html += '.site-CHA{color:var(--green)} .site-ATL{color:var(--blue)} .site-MCO{color:var(--orange)}\n';
@@ -129,43 +131,53 @@ function buildDispatchHTML(b64csv) {
   html += 'a.linkbtn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:var(--fg);background:#1c2230;border:1px solid var(--line);padding:10px 14px;border-radius:12px}\n';
   html += 'a.linkbtn:hover{filter:brightness(1.08)}\n';
 
-  // Kiosk upgrades and taller keypad area
-  html += 'body.fullscreen{height:100vh;overflow:hidden}\n';
+  // Kiosk grid for large screens
   html += '.pane{max-width:1200px;margin:0 auto}\n';
-  html += '.pane-fill{min-height:60vh}\n';
-  html += 'body.fullscreen .pane-fill{min-height:calc(100vh - 160px)}\n';
   html += '.kiosk{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}\n';
   html += '@media (max-width:900px){.kiosk{grid-template-columns:1fr}}\n';
-  html += '#zip{font-size:clamp(24px,3.5vh,40px);width:100%}\n';
-  html += '#go{font-size:clamp(18px,2.8vh,28px)}\n';
-  html += '.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px;align-content:stretch}\n';
-  html += '#pad{min-height:32vh}\n';
-  html += 'body.fullscreen #pad{min-height:50vh}\n';
-  html += '.key{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,4.5vh,36px);padding:clamp(16px,3.8vh,28px);border-radius:12px;border:1px solid var(--line);background:#131826}\n';
-  html += '.big{font-size:clamp(46px,9vh,96px)}\n';
+
+  // Keypad styles
+  html += '.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}\n';
+  html += '.key{display:flex;align-items:center;justify-content:center;font-size:clamp(22px,3.8vh,34px);padding:clamp(14px,3.2vh,26px);border-radius:12px;border:1px solid var(--line);background:#131826}\n';
+
+  // Docked keypad on phones
+  html += '.keypad-dock{display:block}\n';
+  html += '@media (max-width:900px){\n';
+  html += '  .keypad-dock{position:fixed;left:0;right:0;bottom:0;background:rgba(13,18,26,.96);backdrop-filter:saturate(160%) blur(6px);border-top:1px solid var(--line);padding:12px env(safe-area-inset-right) calc(12px + env(safe-area-inset-bottom)) env(safe-area-inset-left);height:42svh;z-index:9}\n';
+  html += '  body.has-dock{padding-bottom:45svh}\n';
+  html += '  #zip{font-size:clamp(22px,3.6vh,36px)}\n';
+  html += '  #go{font-size:clamp(18px,3.0vh,28px)}\n';
+  html += '  .big{font-size:clamp(40px,7.5vh,80px)}\n';
+  html += '}\n';
+  html += 'body.fullscreen .keypad-dock{height:58svh}\n';
+  html += 'body.fullscreen.has-dock{padding-bottom:61svh}\n';
 
   // Toast popup
-  html += '#toast{position:fixed;left:50%;top:18%;transform:translateX(-50%);background:rgba(20,25,36,.95);border:1px solid var(--line);border-radius:16px;padding:18px 22px;z-index:9999;display:none;box-shadow:0 14px 40px rgba(0,0,0,.45);font-size:clamp(26px,6.5vh,54px);font-weight:800;letter-spacing:.5px;text-align:center}\n';
+  html += '#toast{position:fixed;left:50%;top:12%;transform:translateX(-50%);background:rgba(20,25,36,.95);border:1px solid var(--line);border-radius:16px;padding:16px 20px;z-index:9999;display:none;box-shadow:0 14px 40px rgba(0,0,0,.45);font-size:clamp(24px,6.2vh,52px);font-weight:800;letter-spacing:.4px;text-align:center}\n';
   html += '</style>\n';
 
   // Single scheme payload
   html += `<script id="scheme_b64" type="text/plain">${b64csv}</script>\n`;
 
+  // Shell start
+  html += '<div class="shell">\n';
+
   // App chrome with Dashboard link
   html += '<div class="bar"><div class="row" style="justify-content:space-between;"><div class="title">Dispatch Command Center</div><div class="topbar-actions"><a class="linkbtn" id="homeBtn" href="./" title="Back to Dashboard">Dashboard</a><button id="fsBtn" title="Fullscreen">Fullscreen</button></div></div><div class="tabs"><div class="tab active" data-tab="lookup">Lookup</div><div class="tab" data-tab="bin">BIN Ranges</div><div class="tab" data-tab="history">History</div><div class="tab" data-tab="apps">Apps</div></div></div>\n';
+
   html += '<div class="wrap">\n';
 
   // Toast element
   html += '<div id="toast" aria-live="polite"></div>\n';
 
-  // Lookup pane - kiosk grid and fill height
-  html += '<div class="card pane pane-fill" id="pane-lookup" style="display:block">';
+  // Lookup pane
+  html += '<div class="card pane" id="pane-lookup" style="display:block">';
   html +=   '<div class="kiosk">';
   html +=     '<div>';
   html +=       '<div class="row"><input id="zip" inputmode="numeric" maxlength="11" placeholder="Enter 5, 9, or 11 digits"><button id="go">Lookup</button><span class="muted pill">Tip: use the on-screen keypad</span></div>';
   html +=       '<div id="out" class="card" style="margin-top:12px"></div>';
   html +=     '</div>';
-  html +=     '<div><div class="keypad" id="pad"></div></div>';
+  html +=     '<div class="keypad-dock"><div class="keypad" id="pad"></div></div>';
   html +=   '</div>';
   html += '</div>\n';
 
@@ -180,6 +192,9 @@ function buildDispatchHTML(b64csv) {
   html += '<a class="badge play" href="https://play.google.com/store/apps/details?id=com.solvoj.imb.android.app" target="_blank" rel="noopener" aria-label="Get it on Google Play"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26"><polygon points="2,4 18,13 2,22" fill="#34A853"/><polygon points="2,4 12,13 2,13" fill="#FBBC05"/><polygon points="2,22 12,13 2,13" fill="#EA4335"/><polygon points="12,13 18,9.5 18,16.5" fill="#4285F4"/></svg><span class="txt"><span class="sup">Get it on</span><span class="main">Google Play</span></span></a>';
   html += '<a class="badge appstore" href="https://apps.apple.com/us/app/imb-scanner-app/id1635182953" target="_blank" rel="noopener" aria-label="Download on the App Store"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"><path d="M16.365 1.43c.06.79-.29 1.56-.8 2.2-.53.65-1.4 1.16-2.26 1.09-.07-.8.31-1.6.82-2.21.52-.63 1.44-1.14 2.24-1.08zM20.8 17.53c-.4.93-.88 1.83-1.51 2.64-.8 1.09-1.82 2.32-3.16 2.33-1.33.01-1.67-.75-3.11-.75-1.44 0-1.82.73-3.13.76-1.32.03-2.33-1.18-3.14-2.27-1.71-2.3-3.02-6.5-1.26-9.34.86-1.4 2.4-2.29 4.07-2.31 1.27-.03 2.47.85 3.11.85.63 0 2.15-1.05 3.63-.9.62.03 2.37.25 3.49 1.96-3.08 1.64-2.58 5.91.91 6.03z" fill="#fff"/></svg><span class="txt"><span class="sup">Download on the</span><span class="main">App Store</span></span></a>';
   html += '</div></div>\n';
+
+  html += '</div><!-- /wrap -->\n';
+  html += '</div><!-- /shell -->\n';
 
   // App logic
   html += '<script>\n';
@@ -202,8 +217,11 @@ function buildDispatchHTML(b64csv) {
   // Load CSV
   html += '(function(){var csv=decodeURIComponent(escape(atob(document.getElementById("scheme_b64").textContent)));SCHEME=parseCSV(csv);})();\n';
 
-  // Fullscreen toggle with body.fullscreen class and Esc-to-dashboard outside FS
-  html += '(function(){var b=document.getElementById("fsBtn");function setFSClass(){document.body.classList.toggle("fullscreen", !!document.fullscreenElement);}document.addEventListener("fullscreenchange", setFSClass);document.addEventListener("keydown",function(e){if(e.key==="Escape" && !document.fullscreenElement){location.href="./";}});b.onclick=function(){var d=document.documentElement;if(!document.fullscreenElement){(d.requestFullscreen||d.webkitRequestFullscreen||d.msRequestFullscreen).call(d);}else{(document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen).call(document);} };setFSClass();})();\n';
+  // Fullscreen toggle + body class + Esc-to-dashboard when not fullscreen
+  html += '(function(){var b=document.getElementById("fsBtn");function setFS(){document.body.classList.toggle("fullscreen", !!document.fullscreenElement);}document.addEventListener("fullscreenchange", setFS);document.addEventListener("keydown",function(e){if(e.key==="Escape" && !document.fullscreenElement){location.href="./";}});b.onclick=function(){var d=document.documentElement;if(!document.fullscreenElement){(d.requestFullscreen||d.webkitRequestFullscreen||d.msRequestFullscreen).call(d);}else{(document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen).call(document);} };setFS();})();\n';
+
+  // Mobile dock padding toggle
+  html += '(function(){function setDock(){document.body.classList.toggle("has-dock", window.matchMedia("(max-width: 900px)").matches);}window.addEventListener("resize",setDock,{passive:true});setDock();})();\n';
 
   // Build keypad
   html += '(function(){var pad=document.getElementById("pad");var keys=["1","2","3","4","5","6","7","8","9","CLR","0","ENTER"];for(var i=0;i<keys.length;i++){var k=document.createElement("button");k.className="key";k.textContent=keys[i];pad.appendChild(k);}})();\n';
@@ -218,7 +236,6 @@ function buildDispatchHTML(b64csv) {
   html += 'function updateHistory(){var w=document.getElementById("histWrap");var exp=document.getElementById("histExport");var clr=document.getElementById("histClear");clearNode(w);if(!HISTORY.length){exp.disabled=true;w.innerHTML="<div class=\\"muted\\">No lookups yet.</div>";return;}exp.disabled=false;var tbl=document.createElement("table");tbl.className="table";tbl.innerHTML="<thead><tr><th>Time</th><th>ZIP</th><th>Label</th><th>BIN</th><th>Range</th></tr></thead>";var tb=document.createElement("tbody");for(var i=0;i<Math.min(HISTORY.length,200);i++){var r=HISTORY[i];var dt=new Date(r.ts);var tr=document.createElement("tr");tr.innerHTML="<td>"+dt.toLocaleString()+"</td><td>"+r.zip+"</td><td>"+r.site+"</td><td>"+r.bin+"</td><td>"+r.range+"</td>";tb.appendChild(tr);}tbl.appendChild(tb);w.appendChild(tbl);clr.onclick=function(){HISTORY=[];updateHistory();};exp.onclick=function(){var lines=["time,zip,label,bin,range"];for(var j=0;j<HISTORY.length;j++){var rr=HISTORY[j];lines.push([new Date(rr.ts).toISOString(),rr.zip,rr.site,rr.bin,rr.range].join(","));}var csv=lines.join("\\n");var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="lookup_history.csv";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},800);};}\n';
 
   html += '</script>\n';
-  html += '</div>\n';
   return html;
 }
 
