@@ -190,3 +190,10 @@ const b64 = b64encodeUtf8(csv);
 const html = buildDispatchHTML(b64);
 fs.writeFileSync(path.join(process.cwd(), 'DispatchTool.html'), html, 'utf8');
 console.log('DispatchTool.html generated with', rows.length, 'rows.');
+
+// Write a tiny version file for the dashboard badge
+const nowIso = new Date().toISOString();
+const version = { built: nowIso, rows: rows.length };
+fs.writeFileSync(path.join(process.cwd(), 'version.json'), JSON.stringify(version, null, 2), 'utf8');
+console.log('version.json written:', version);
+
