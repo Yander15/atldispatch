@@ -1,0 +1,288 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scheme → Dispatch Command Center Builder (Mobile/Tablet Kiosk)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>
+  :root {
+    --bg:#0f1115; --fg:#e8eaf0; --muted:#9aa3b2; --card:#171a21; --line:#2a2f3a;
+    --accent:#7aa2ff; --green:#1fbf75; --orange:#ff9f40; --blue:#4ea1ff;
+  }
+  html, body { height:100%; }
+  body { font:16px system-ui,-apple-system,"Segoe UI",Roboto; margin:0; color:var(--fg); background:var(--bg); }
+  .wrap { padding:16px; max-width:1100px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 8px; }
+  h2 { font-size:18px; margin:18px 0 8px; }
+  textarea { width:100%; height:260px; font:13px ui-monospace,Menlo,Consolas,monospace; padding:12px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .card { border:1px solid var(--line); border-radius:14px; padding:12px; margin:12px 0; background:var(--card); }
+  button { font:16px; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:#1c2230; color:var(--fg); cursor:pointer; }
+  input[type="text"] { font:16px; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#121620; color:var(--fg); width:280px; }
+  label { color:var(--muted); font-size:13px; }
+  .muted { color:var(--muted); font-size:12px; }
+  #csvPreview { white-space:pre; overflow:auto; max-height:180px; background:#0d121a; border:1px solid var(--line); padding:12px; border-radius:12px; }
+  #status { margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Scheme to Dispatch Command Center Builder</h1>
+  <p class="muted">Pastes your .scm and outputs a single-file, offline Dispatch app optimized for tablets on a tripod.</p>
+
+  <div class="card">
+    <h2>1) Paste .scm contents</h2>
+    <textarea id="scm" placeholder="Paste your entire scheme file here..."></textarea>
+    <div class="row">
+      <div>
+        <label>Output file name</label><br>
+        <input id="outfile" type="text" value="dispatch.html">
+      </div>
+      <div style="align-self:end;">
+        <button id="build">Convert and Build HTML</button>
+      </div>
+    </div>
+    <div id="status" class="muted">Idle</div>
+  </div>
+
+  <div class="card">
+    <h2>2) CSV preview</h2>
+    <div id="csvPreview"></div>
+  </div>
+
+  <div class="card">
+    <h2>3) Download</h2>
+    <button id="download" disabled>Download dispatch.html</button>
+    <div class="muted">Open the downloaded file directly. On iOS, open in Safari.</div>
+  </div>
+</div>
+
+<script>
+/* ---------- Shared helpers ---------- */
+function replaceAll(str, find, repl) {
+  var out = String(str), idx;
+  while ((idx = out.indexOf(find)) !== -1) out = out.slice(0, idx) + repl + out.slice(idx + find.length);
+  return out;
+}
+function expand3To5(a, b) { return [a + "00", b + "99"]; }
+function isDigits(str, count) {
+  if (String(str).length !== count) return false;
+  for (var i=0;i<str.length;i++){ var ch=str.charCodeAt(i); if (ch<48||ch>57) return false; }
+  return true;
+}
+function normalizeTokenToRange(token) {
+  token = String(token||"").trim();
+  if (!token) return null;
+  var dash = token.indexOf('-');
+  if (dash !== -1) {
+    var A = String(token.slice(0,dash)).trim();
+    var B = String(token.slice(dash+1)).trim();
+    if (isDigits(A,5) && isDigits(B,5)) return {zip_start:A,zip_end:B};
+    if (isDigits(A,3) && isDigits(B,3)) {
+      var e = expand3To5(A,B), s=e[0], t=e[1];
+      while (s.length<5) s='0'+s; while (t.length<5) t='0'+t;
+      return {zip_start:s,zip_end:t};
+    }
+    return null;
+  } else {
+    if (isDigits(token,5)) return {zip_start:token,zip_end:token};
+    if (isDigits(token,3)) {
+      var e2 = expand3To5(token,token), s2=e2[0], t2=e2[1];
+      while (s2.length<5) s2='0'+s2; while (t2.length<5) t2='0'+t2;
+      return {zip_start:s2,zip_end:t2};
+    }
+    return null;
+  }
+}
+function parseSchemeToRows(text) {
+  var rows=[], txt=String(text||"");
+  var CR=String.fromCharCode(13), LF=String.fromCharCode(10);
+  txt = replaceAll(txt, CR, "");
+  var lines = txt.split(LF);
+  for (var i=0;i<lines.length;i++){
+    var line = String(lines[i]||"").trim();
+    if (!line) continue;
+    if (line.charAt(0)==='"' && line.charAt(line.length-1)==='"') line=line.slice(1,-1);
+    var parts = line.split('*'); if (parts.length<4) continue;
+    var bin = String(parts[0]||"").trim();
+    var machine = String(parts[1]||"").trim();
+    var zipsPart = String(parts[3]||"").trim();
+    if (!bin || !isDigits(bin, bin.length)) continue;
+    var tokens = zipsPart.split(',');
+    for (var j=0;j<tokens.length;j++){
+      var tok = String(tokens[j]||"").trim(); if (!tok) continue;
+      var range = normalizeTokenToRange(tok); if (!range) continue;
+      var a=range.zip_start, b=range.zip_end;
+      rows.push({ zip_start:a, zip_end:b, bin:bin, machine:machine, note:"", zip11_start:a+"00000"+"0", zip11_end:b+"99999"+"9" });
+    }
+  }
+  var seen={}, out=[];
+  for (var k=0;k<rows.length;k++){
+    var r=rows[k];
+    var key=[r.zip_start,r.zip_end,r.bin,r.machine].join('|');
+    if (seen[key]) continue;
+    seen[key]=true;
+    out.push(r);
+  }
+  out.sort(function(a,b){
+    var bn=Number(a.bin)-Number(b.bin);
+    if (bn!==0) return bn;
+    if (a.zip_start!==b.zip_start) return a.zip_start<b.zip_start?-1:1;
+    return a.zip_end<b.zip_end?-1:1;
+  });
+  return out;
+}
+function toCSV(rows) {
+  var header=["zip_start","zip_end","bin","machine","note","zip11_start","zip11_end"];
+  var lines=[header.join(',')];
+  var LF=String.fromCharCode(10);
+  for (var i=0;i<rows.length;i++){
+    var r=rows[i];
+    lines.push([r.zip_start,r.zip_end,r.bin,r.machine,r.note,r.zip11_start,r.zip11_end].join(','));
+  }
+  return lines.join(LF);
+}
+function b64encode(str){ return btoa(unescape(encodeURIComponent(str))); }
+
+/* ---------- Build the generated dispatch.html ---------- */
+function buildDispatchHTML(b64csv){
+  var html='';
+  html+='<!doctype html>\n<meta charset="utf-8">\n<title>Dispatch Command Center — Offline</title>\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">\n';
+  html+='<style>\n';
+  html+=':root{--bg:#0f1115;--fg:#e8eaf0;--muted:#9aa3b2;--card:#171a21;--line:#2a2f3a;--accent:#7aa2ff;--green:#1fbf75;--orange:#ff9f40;--blue:#4ea1ff}\n';
+  html+='html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:18px system-ui,-apple-system,"Segoe UI",Roboto}\n';
+  html+='.bar{position:sticky;top:0;z-index:5;background:rgba(15,17,21,.85);backdrop-filter:saturate(180%) blur(8px);padding:10px 12px;border-bottom:1px solid var(--line)}\n';
+  html+='.title{font-size:18px;font-weight:700} .muted{color:var(--muted);font-size:12px}\n';
+  html+='.tabs{display:flex;gap:8px;overflow:auto;padding:8px 0}\n';
+  html+='.tab{padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#1a1f2b;cursor:pointer;white-space:nowrap}\n';
+  html+='.tab.active{background:#1f2a3f;border-color:#4d6cff}\n';
+  html+='.wrap{padding:14px;max-width:1000px;margin:0 auto}\n';
+  html+='.card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;margin:14px 0}\n';
+  html+='.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}\n';
+  html+='input[type=text]{font:22px system-ui;letter-spacing:1px;width:260px;padding:12px;border-radius:12px;border:1px solid var(--line);background:#101521;color:var(--fg)}\n';
+  html+='button{font:18px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:#1c2230;color:var(--fg);cursor:pointer}\n';
+  html+='.big{font-size:64px;font-weight:900;letter-spacing:.5px}\n';
+  html+='.site-CHA{color:var(--green)} .site-ATL{color:var(--blue)} .site-MCO{color:var(--orange)}\n';
+  html+='#out{display:none}\n';
+  html+='.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}\n';
+  html+='.key{font-size:22px;padding:18px;border-radius:12px;border:1px solid var(--line);background:#131826}\n';
+  html+='.table{width:100%;border-collapse:collapse}\n';
+  html+='.table th,.table td{border:1px solid var(--line);padding:10px;text-align:left}\n';
+  html+='.store{display:flex;gap:12px;flex-wrap:wrap;align-items:center}\n';
+  html+='.badge{display:inline-flex;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;text-decoration:none;line-height:1;white-space:nowrap;border:1px solid rgba(255,255,255,.08)}\n';
+  html+='.badge svg{display:block;flex:0 0 auto} .badge .txt{display:flex;flex-direction:column}\n';
+  html+='.badge .sup{font-size:12px;opacity:.9} .badge .main{font-size:18px;font-weight:700;letter-spacing:.2px}\n';
+  html+='.badge.play{background:#121212;color:#fff} .badge.appstore{background:#000;color:#fff}\n';
+  html+='.pill{padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:#121827}\n';
+  html+='.topbar-actions{display:flex;gap:8px;align-items:center}\n';
+  html+='</style>\n';
+  html+='<div class="bar"><div class="row" style="justify-content:space-between;"><div class="title">Dispatch Command Center</div><div class="topbar-actions"><button id="fsBtn" title="Fullscreen">Fullscreen</button></div></div><div class="tabs"><div class="tab active" data-tab="lookup">Lookup</div><div class="tab" data-tab="bin">BIN Ranges</div><div class="tab" data-tab="history">History</div><div class="tab" data-tab="apps">Apps</div></div></div>\n';
+  html+='<div class="wrap">\n';
+
+  /* Lookup pane */
+  html+='<div class="card pane" id="pane-lookup" style="display:block"><div class="row"><input id="zip" inputmode="numeric" maxlength="11" placeholder="Enter 5, 9, or 11 digits"><button id="go">Lookup</button><span class="muted pill">Tip: use the on-screen keypad</span></div><div class="keypad" id="pad"></div><div id="out" class="card" style="margin-top:12px"></div></div>\n';
+
+  /* BIN ranges pane */
+  html+='<div class="card pane" id="pane-bin" style="display:none"><div class="row"><input id="binInput" inputmode="numeric" placeholder="Enter BIN or ZIP"><button id="binGo">Show Ranges</button></div><div id="binOut" class="card" style="display:none;margin-top:12px"></div></div>\n';
+
+  /* History pane */
+  html+='<div class="card pane" id="pane-history" style="display:none"><div class="row"><button id="histClear">Clear History</button><button id="histExport" disabled>Export CSV</button></div><div id="histWrap" style="margin-top:12px"></div></div>\n';
+
+  /* Apps pane */
+  html+='<div class="card pane" id="pane-apps" style="display:none"><div style="font-weight:600;margin-bottom:8px">Scanner Apps</div><div class="store">';
+  html+='<a class="badge play" href="https://play.google.com/store/apps/details?id=com.solvoj.imb.android.app" target="_blank" rel="noopener" aria-label="Get it on Google Play">'
+      +'<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26" role="img" aria-hidden="true">'
+      +'<polygon points="2,4 18,13 2,22" fill="#34A853"/><polygon points="2,4 12,13 2,13" fill="#FBBC05"/><polygon points="2,22 12,13 2,13" fill="#EA4335"/><polygon points="12,13 18,9.5 18,16.5" fill="#4285F4"/></svg>'
+      +'<span class="txt"><span class="sup">Get it on</span><span class="main">Google Play</span></span></a>';
+  html+='<a class="badge appstore" href="https://apps.apple.com/us/app/imb-scanner-app/id1635182953" target="_blank" rel="noopener" aria-label="Download on the App Store">'
+      +'<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" role="img" aria-hidden="true">'
+      +'<path d="M16.365 1.43c.06.79-.29 1.56-.8 2.2-.53.65-1.4 1.16-2.26 1.09-.07-.8.31-1.6.82-2.21.52-.63 1.44-1.14 2.24-1.08zM20.8 17.53c-.4.93-.88 1.83-1.51 2.64-.8 1.09-1.82 2.32-3.16 2.33-1.33.01-1.67-.75-3.11-.75-1.44 0-1.82.73-3.13.76-1.32.03-2.33-1.18-3.14-2.27-1.71-2.3-3.02-6.5-1.26-9.34.86-1.4 2.4-2.29 4.07-2.31 1.27-.03 2.47.85 3.11.85.63 0 2.15-1.05 3.63-.9.62.03 2.37.25 3.49 1.96-3.08 1.64-2.58 5.91.91 6.03z" fill="#fff"/></svg>'
+      +'<span class="txt"><span class="sup">Download on the</span><span class="main">App Store</span></span></a>';
+  html+='</div></div>\n';
+
+  /* CSV payload */
+  html+='<script id="scheme_b64" type="text/plain">'+b64csv+'</'+'script>\n';
+
+  /* Core logic */
+  html+='<script>\n';
+  html+='var SCHEME=[], HISTORY=[];\n';
+
+  /* Tabs */
+  html+='(function(){var tabs=document.getElementsByClassName("tab");function show(id){for(var i=0;i<tabs.length;i++){var t=tabs[i];var active=t.getAttribute("data-tab")===id;t.className=active?"tab active":"tab";var p=document.getElementById("pane-"+t.getAttribute("data-tab"));if(p)p.style.display=active?"block":"none";}}for(var i=0;i<tabs.length;i++){tabs[i].onclick=(function(t){return function(){show(t.getAttribute("data-tab"));};})(tabs[i]);}})();\n';
+
+  /* Utils */
+  html+='function clearNode(el){while(el.firstChild)el.removeChild(el.firstChild);} \n';
+  html+='function siteLabelForBin(b){b=parseInt(b,10);if(isNaN(b))return"";if(b>=5&&b<=17)return"CHA "+b; if(b>=18&&b<=32)return"ATL "+b; if(b>=33&&b<=36)return"MCO "+b; return "BIN "+b;}\n';
+  html+='function siteClassForBin(b){b=parseInt(b,10);if(b>=5&&b<=17)return"site-CHA"; if(b>=18&&b<=32)return"site-ATL"; if(b>=33&&b<=36)return"site-MCO"; return ""}\n';
+  html+='function parseCSV(t){var CR=String.fromCharCode(13),LF=String.fromCharCode(10);t=String(t||"");t=t.replace(new RegExp(CR,"g"),"");var lines=t.trim().split(LF);if(!lines.length)return[];var header=lines.shift().split(",");var idx={},i;for(i=0;i<header.length;i++){idx[header[i].trim()]=i;}var need=["zip_start","zip_end","bin","machine","note","zip11_start","zip11_end"];for(i=0;i<need.length;i++){if(!(need[i] in idx))throw new Error("Missing column: "+need[i]);}var rows=[],j;for(j=0;j<lines.length;j++){var l=lines[j];if(!l)continue;var c=l.split(",");rows.push({zip_start:c[idx.zip_start],zip_end:c[idx.zip_end],bin:c[idx.bin],machine:c[idx.machine],note:c[idx.note]||"",zip11_start:c[idx.zip11_start],zip11_end:c[idx.zip11_end]});}rows.sort(function(a,b){return a.zip11_start<b.zip11_start?-1:1});return rows;}\n';
+  html+='function norm11(x){var d=String(x||""),only="";for(var i=0;i<d.length;i++){var ch=d.charCodeAt(i);if(ch>=48&&ch<=57)only+=d.charAt(i);}if(only.length!==5&&only.length!==9&&only.length!==11)return null;var s=(only+"00000000000").slice(0,11);var e=(only+"99999999999").slice(0,11);return{d:only,start:s,end:e};}\n';
+  html+='function bsearch(a,s){var lo=0,hi=a.length-1,ans=-1;while(lo<=hi){var mid=(lo+hi)>>1;if(a[mid].zip11_start<=s){ans=mid;lo=mid+1;}else{hi=mid-1;}}return ans;}\n';
+  html+='function lookup(zip){if(!SCHEME.length)return null;var n=norm11(zip);if(!n)return null;var tries=[];if(n.d.length===11)tries.push(n);if(n.d.length>=9){var n9=norm11(n.d.slice(0,9));if(n9)tries.push(n9);}var n5=norm11(n.d.slice(0,5));if(n5)tries.push(n5);for(var t=0;t<t ries.length;t++){var tt=tries[t];var i=bsearch(SCHEME,tt.start);for(var k=Math.max(0,i-12);k<=Math.min(SCHEME.length-1,i+12);k++){var row=SCHEME[k];if(tt.start>=row.zip11_start&&tt.end<=row.zip11_end)return row;}}var ii=bsearch(SCHEME,n.start);for(var kk=Math.max(0,ii-12);kk<=Math.min(SCHEME.length-1,ii+12);kk++){var r2=SCHEME[kk];if(n.start>=r2.zip11_start&&n.start<=r2.zip11_end)return r2;}return null;}\n'.replace('t ries','tries'); /* keep code single line without long dash */
+
+  /* Load CSV */
+  html+='(function(){var csv=decodeURIComponent(escape(atob(document.getElementById("scheme_b64").textContent)));SCHEME=parseCSV(csv);})();\n';
+
+  /* Fullscreen button */
+  html+='(function(){var b=document.getElementById("fsBtn");b.onclick=function(){var d=document.documentElement;if(!document.fullscreenElement){if(d.requestFullscreen)d.requestFullscreen();}else{if(document.exitFullscreen)document.exitFullscreen();}}})();\n';
+
+  /* Keypad build with ENTER key */
+  html+='(function(){var pad=document.getElementById("pad");var keys=["1","2","3","4","5","6","7","8","9","CLR","0","ENTER"];for(var i=0;i<keys.length;i++){var k=document.createElement("button");k.className="key";k.textContent=keys[i];pad.appendChild(k);}})();\n';
+
+  /* Lookup UI: avoid focusing input after search */
+  html+='(function(){var zip=document.getElementById("zip");var out=document.getElementById("out");function render(row){out.style.display="block";clearNode(out);if(!row){out.textContent="No match. Verify ZIP.";return;}var b=parseInt(row.bin,10);var site=siteLabelForBin(b);var cls=siteClassForBin(b);var h=document.createElement("div");h.className="big "+cls;h.textContent=site;out.appendChild(h);var d=document.createElement("div");d.className="muted";d.textContent="BIN "+row.bin+" • ZIP "+row.zip_start+" to "+row.zip_end;out.appendChild(d);try{if(navigator.vibrate)navigator.vibrate(50);}catch(e){}HISTORY.unshift({ts:Date.now(),zip:zip.value,site:site,bin:row.bin,range:row.zip_start+"-"+row.zip_end});updateHistory();}\n';
+  html+='document.getElementById("go").onclick=function(){var r=lookup(zip.value);render(r);zip.value="";};\n';
+  html+='document.getElementById("pad").onclick=function(e){var t=e.target;if(t.tagName!=="BUTTON")return;var v=t.textContent;if(v==="ENTER"){var r=lookup(zip.value);render(r);zip.value="";return;}if(v==="CLR"){zip.value="";return;}if(zip.value.length>=11)return;zip.value+=v;};})();\n';
+
+  /* BIN ranges: accept BIN or ZIP */
+  html+='(function(){var binGo=document.getElementById("binGo");var binIn=document.getElementById("binInput");var out=document.getElementById("binOut");binGo.onclick=function(){var raw=(binIn.value||"").trim();var digits=raw.replace(/\\D+/g,"");var b=null;if(digits.length===5||digits.length===9||digits.length===11){var row=lookup(digits);if(row)b=parseInt(row.bin,10);}if(b==null)b=parseInt(digits,10);out.style.display="block";clearNode(out);if(isNaN(b)){out.textContent="Enter a BIN or a ZIP.";return;}var tbl=document.createElement("table");tbl.className="table";tbl.innerHTML="<thead><tr><th>Label</th><th>ZIP Start</th><th>ZIP End</th><th>Note</th></tr></thead>";var tb=document.createElement("tbody");var count=0;for(var i=0;i<SCHEME.length;i++){var r=SCHEME[i];if(parseInt(r.bin,10)===b){var tr=document.createElement("tr");tr.innerHTML="<td>"+siteLabelForBin(r.bin)+"</td><td>"+r.zip_start+"</td><td>"+r.zip_end+"</td><td>"+(r.note||"")+"</td>";tb.appendChild(tr);count++;}}if(!count){out.textContent="No rows for that BIN.";return;}tbl.appendChild(tb);out.appendChild(tbl);};})();\n';
+
+  /* History */
+  html+='function updateHistory(){var w=document.getElementById("histWrap");var exp=document.getElementById("histExport");var clr=document.getElementById("histClear");clearNode(w);if(!HISTORY.length){exp.disabled=true;w.innerHTML="<div class=\\"muted\\">No lookups yet.</div>";return;}exp.disabled=false;var tbl=document.createElement("table");tbl.className="table";tbl.innerHTML="<thead><tr><th>Time</th><th>ZIP</th><th>Label</th><th>BIN</th><th>Range</th></tr></thead>";var tb=document.createElement("tbody");for(var i=0;i<Math.min(HISTORY.length,200);i++){var r=HISTORY[i];var dt=new Date(r.ts);var tr=document.createElement("tr");tr.innerHTML="<td>"+dt.toLocaleString()+"</td><td>"+r.zip+"</td><td>"+r.site+"</td><td>"+r.bin+"</td><td>"+r.range+"</td>";tb.appendChild(tr);}tbl.appendChild(tb);w.appendChild(tbl);clr.onclick=function(){HISTORY=[];updateHistory();};exp.onclick=function(){var lines=["time,zip,label,bin,range"];for(var j=0;j<HISTORY.length;j++){var rr=HISTORY[j];lines.push([new Date(rr.ts).toISOString(),rr.zip,rr.site,rr.bin,rr.range].join(","));}var csv=lines.join("\\n");var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="lookup_history.csv";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},800);};}\n';
+
+  html+='</'+'script>\n';
+  html+='<script id="scheme_b64" type="text/plain">'+b64csv+'</'+'script>\n';
+  html+='</div>\n';
+  return html;
+}
+
+/* ---------- Builder page wiring ---------- */
+function downloadFile(name, content) {
+  var blob = new Blob([content], {type: 'text/html;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = name || 'dispatch.html';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1200);
+}
+document.getElementById('build').addEventListener('click', function(){
+  var scm = document.getElementById('scm').value;
+  var outname = document.getElementById('outfile').value || 'dispatch.html';
+  var status = document.getElementById('status');
+  status.textContent = 'Parsing .scm...';
+  try {
+    var rows = parseSchemeToRows(scm);
+    if (!rows.length) { status.innerHTML = '<span class="err">No rows parsed. Check input format.</span>'; return; }
+    var csv = toCSV(rows);
+    var LF = String.fromCharCode(10);
+    document.getElementById('csvPreview').textContent = csv.split(LF).slice(0,60).join(LF) + LF + '...';
+    status.innerHTML = 'Parsed <b>' + rows.length + '</b> rows. Building HTML...';
+    var b64 = b64encode(csv);
+    var html = buildDispatchHTML(b64);
+    window._builtHTML = html;
+    window._outname = outname;
+    document.getElementById('download').disabled = false;
+    status.innerHTML = '<span class="ok">Build ready.</span> Click Download.';
+  } catch (e) {
+    status.innerHTML = '<span class="err">Error:</span> ' + e.message;
+    console.error(e);
+  }
+});
+document.getElementById('download').addEventListener('click', function(){
+  if (!window._builtHTML) return;
+  downloadFile(window._outname, window._builtHTML);
+});
+</script>
+</body>
+</html>
