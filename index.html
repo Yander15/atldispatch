@@ -1,73 +1,101 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>ATL Dispatch Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body {
-    font-family: system-ui, sans-serif;
-    margin: 0;
-    background: linear-gradient(135deg, #0078d4, #005fa3);
-    color: white;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 40px 20px;
+  /* Same design tokens used by Dispatch Tool */
+  :root{
+    --bg:#0f1115; --fg:#e8eaf0; --muted:#9aa3b2; --card:#171a21; --line:#2a2f3a;
+    --accent:#7aa2ff; --green:#1fbf75; --orange:#ff9f40; --blue:#4ea1ff;
   }
-  h1 {
-    margin-bottom: 10px;
-    font-size: 2rem;
-    text-align: center;
+
+  /* Base */
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--fg); background:var(--bg);
+    font:16px system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,Helvetica,Arial,sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:28px;
   }
-  p {
-    margin-bottom: 30px;
-    text-align: center;
-    opacity: 0.9;
+
+  /* Shell */
+  .wrap{width:100%; max-width:980px}
+  header{text-align:center; margin-bottom:22px}
+  h1{margin:0 0 6px; font-size:clamp(22px,3.6vw,34px); letter-spacing:.2px}
+  .lead{margin:0; color:var(--muted)}
+
+  /* Grid of cards */
+  .grid{
+    display:grid; gap:16px; margin-top:24px;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
   }
-  .dashboard {
-    display: grid;
-    gap: 20px;
-    width: 100%;
-    max-width: 400px;
+  a.card{
+    display:block; text-decoration:none; color:var(--fg);
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:18px; transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    position:relative; overflow:hidden;
   }
-  .card {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 12px;
-    padding: 20px;
-    text-align: center;
-    transition: transform 0.15s ease, background 0.15s ease;
-    font-size: 1.1rem;
+  a.card:focus{outline:2px solid var(--accent); outline-offset:2px}
+  a.card:hover{transform:translateY(-2px); border-color:#3a4660; box-shadow:0 10px 24px rgba(0,0,0,.35)}
+  .emoji{font-size:26px; margin-bottom:8px}
+  .title{font-weight:700; font-size:18px; margin:0 0 4px}
+  .desc{margin:0; color:var(--muted); font-size:14px; line-height:1.35}
+
+  /* Small top actions, optional */
+  .topbar{
+    display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:8px;
   }
-  .card a {
-    color: white;
-    text-decoration: none;
-    display: block;
+  .btn{
+    font:14px inherit; padding:8px 12px; border-radius:12px; cursor:pointer;
+    color:var(--fg); background:#1c2230; border:1px solid var(--line);
   }
-  .card:hover {
-    transform: scale(1.03);
-    background: rgba(255, 255, 255, 0.25);
-  }
+  .btn:hover{filter:brightness(1.08)}
+  footer{margin-top:22px; text-align:center; color:var(--muted); font-size:13px}
 </style>
 </head>
 <body>
+  <div class="wrap">
+    <header>
+      <h1>ATL Dispatch</h1>
+      <p class="lead">Select a tool to continue</p>
+    </header>
 
-<h1>ATL Dispatch</h1>
-<p>Select a tool to continue</p>
+    <!-- Optional top actions for you. Safe to remove. -->
+    <!-- <div class="topbar">
+      <button class="btn" onclick="location.href='dispatch-builder/'">Open Builder</button>
+    </div> -->
 
-<div class="dashboard">
-  <div class="card">
-    <a href="DispatchTool.html">🚚 Dispatch Tool</a>
+    <nav class="grid">
+      <a class="card" href="DispatchTool.html">
+        <div class="emoji">🚚</div>
+        <div class="title">Dispatch Tool</div>
+        <p class="desc">Fast ZIP to BIN lookup with keypad and history.</p>
+      </a>
+
+      <!-- If you have another entry point, keep it here -->
+      <!-- <a class="card" href="DispatchToolbox.html">
+        <div class="emoji">🧰</div>
+        <div class="title">Dispatch Toolbox</div>
+        <p class="desc">Utility set for supervisors and leads.</p>
+      </a> -->
+
+      <a class="card" href="Reports.html">
+        <div class="emoji">📊</div>
+        <div class="title">Reports</div>
+        <p class="desc">KPIs and quick exports.</p>
+      </a>
+
+      <!-- Keep the generator private. Link only if you want it visible. -->
+      <!-- <a class="card" href="dispatch-builder/">
+        <div class="emoji">🧱</div>
+        <div class="title">Builder</div>
+        <p class="desc">Admin only. Convert schemes to live tool.</p>
+      </a> -->
+    </nav>
+
+    <footer>© ATL Dispatch</footer>
   </div>
-  <div class="card">
-    <a href="Reports.html">📊 Reports</a>
-  </div>
-  <!-- Optional, for you only. Don’t link it publicly. -->
-  <!-- <div class="card"><a href="dispatch-builder/">🧱 Builder (Admin)</a></div> -->
-</div>
-
 </body>
 </html>
-
-
-
